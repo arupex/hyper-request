@@ -1,0 +1,25 @@
+{
+  "name": "hyper-request",
+  "version": "0.0.1",
+  "description": "Make http Requests without all those sub-dependencies, just http with a api wrapper",
+  "main": "hrequest.js",
+  "scripts": {
+    "test": "mocha test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arupex/hyper-request.git"
+  },
+  "keywords": [
+    "request",
+    "http",
+    "no-dependencies",
+    "rest"
+  ],
+  "author": "dirwin517",
+  "license": "UNLICENSED",
+  "bugs": {
+    "url": "https://github.com/arupex/hyper-request/issues"
+  },
+  "homepage": "https://github.com/arupex/hyper-request#readme"
+}
