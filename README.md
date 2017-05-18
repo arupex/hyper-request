@@ -1,5 +1,5 @@
 # hyper-request
-    Simpler Http than build in node
+    Simpler Http/s than build in node
 
 
 #Install
@@ -32,3 +32,7 @@
         function(){
         
         });
+
+#Streams
+
+        SimpleRestClient.get('?symbols=USD,GBP', {}).pipe(process.stdout;
