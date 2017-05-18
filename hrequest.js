@@ -2,8 +2,11 @@
 module.exports = (function () {
 
     let http = require('http');
+    let https = require('https');
     let path = require('path');
     let zlib = require('zlib');
+    let Transform = require('stream').Transform;
+    const util = require('util');
 
     const GET = 'GET';
     const PATCH = 'PATCH';
@@ -97,23 +100,23 @@ module.exports = (function () {
         }
 
         function doGet(endpoint, options, callback, failure) {
-            this.makeRequest(GET, endpoint, options, callback, failure);
+            return this.makeRequest(GET, endpoint, options, callback, failure);
         }
 
         function doPost(endpoint, options, callback, failure) {
-            this.makeRequest(POST, endpoint, options, callback, failure);
+            return this.makeRequest(POST, endpoint, options, callback, failure);
         }
 
         function doDelete(endpoint, options, callback, failure) {
-            this.makeRequest(DELETE, endpoint, options, callback, failure);
+            return this.makeRequest(DELETE, endpoint, options, callback, failure);
         }
 
         function doPut(endpoint, options, callback, failure) {
-            this.makeRequest(PUT, endpoint, options, callback, failure);
+            return this.makeRequest(PUT, endpoint, options, callback, failure);
         }
 
         function doPatch(endpoint, options, callback, failure) {
-            this.makeRequest(PATCH, endpoint, options, callback, failure);
+            return this.makeRequest(PATCH, endpoint, options, callback, failure);
         }
 
         function makeRequest(verb, endpoint, opts, ok, fail) {
@@ -136,7 +139,7 @@ module.exports = (function () {
             let failure = asynchronize(fail);
             let asyncResponseCaller = asynchronize(rawResponseCaller);
 
-            var requestOptions = {
+            let requestOptions = {
                 method: verb,
                 protocol: protocol,
                 host: baseUrl,
@@ -175,27 +178,21 @@ module.exports = (function () {
                 });
             }
 
-            var responseData = '';
+            let responseData = '';
 
-            // console.log('requestOptions', requestOptions);
+            const Transformer = new Transform({
+                transform(chunk, encoding, callback) {
+                    responseData += chunk.toString('utf8');
+                    callback(null, chunk);
+                }
+            });
 
-            return new Promise((resolve, reject) => {
-
-                const Writable = require('stream').Writable;
-
-                // All Transform streams are also Duplex Streams
-                const myTransform = new Writable({
-                    write(chunk, encoding, callback) {
-                        responseData += chunk.toString('utf8');
-                        callback(null, chunk);
-                    }
-                });
-
+            let resultant = new Promise((resolve, reject) => {
 
                 let responseCode;
                 let responseHeaders;
 
-                const req = http.request(requestOptions,
+                const req = (protocol.indexOf('https') === -1?http:https).request(requestOptions,
                     function (response) {
 
                         responseCode = response.statusCode;
@@ -203,13 +200,13 @@ module.exports = (function () {
                         responseHeaders = response.headers;
 
                         if (['gzip', 'deflate'].indexOf(response.headers['content-encoding']) !== -1) {
-                            response.pipe(zlib.createUnzip()).pipe(myTransform);
+                            response.pipe(zlib.createUnzip()).pipe(Transformer);
                         }
                         else {
-                            response.pipe(myTransform);
+                            response.pipe(Transformer);
                         }
 
-                        myTransform.on('finish', () => {
+                        Transformer.on('finish', () => {
                             let data = JSON.parse(responseData);
 
                             asyncResponseCaller(response, data, responseHeaders);
@@ -262,6 +259,23 @@ module.exports = (function () {
                 }
                 req.end();
             });
+
+            Object.assign(resultant, Transformer);
+
+            //hack!
+            resultant.pipe = Transformer.pipe;
+            resultant.once = Transformer.once;
+            resultant.on = Transformer.on;
+            resultant.resume = Transformer.resume;
+            resultant.read = Transformer.read;
+            resultant.write = Transformer.write;
+            resultant._read = Transformer._read;
+            resultant._write = Transformer._write;
+            resultant.emit = Transformer.emit;
+            resultant.removeListener = Transformer.removeListener;
+            resultant.unpipe = Transformer.unpipe;
+
+            return resultant;
         }
 
         return {
