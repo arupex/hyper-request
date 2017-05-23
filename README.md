@@ -15,6 +15,7 @@
         rawResponseCaller : function(a, b){
 
         },
+        parserFunction : function(data){ return JSON.parse(data) } // optional ( defaults to JSON.parse
         timeout : 4000,
         cacheTtl : 500
     });

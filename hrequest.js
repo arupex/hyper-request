@@ -55,6 +55,8 @@ module.exports = (function () {
         let baseUrl = url.host;
         let baseEndpoint = url.path;
 
+        let parserFunction = opts.parserFunction || JSON.parse;
+
         let debug = typeof opts.debug === 'boolean'? opts.debug : false;
 
         let timeout = opts.timeout || 60000;
@@ -207,7 +209,14 @@ module.exports = (function () {
                         }
 
                         Transformer.on('finish', () => {
-                            let data = JSON.parse(responseData);
+                            let data = null;
+                            try {
+                                data = parserFunction(responseData);
+                            }
+                            catch(e){
+                                failure(e);
+                                return reject(e);
+                            }
 
                             asyncResponseCaller(response, data, responseHeaders);
 
