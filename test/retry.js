@@ -1,0 +1,48 @@
+/**
+ * Created by daniel.irwin on 6/6/17.
+ */
+
+describe('retry', () => {
+
+
+    var SimpleRestClient = require('../hrequest')({
+        // protocol : 'http://',
+        baseUrl : 'http://api.fixer.io/thisdoesnotexist',
+        basicAuthToken : '',
+        customLogger : function(verb, endpoint, time){
+            console.log(verb, endpoint, time);
+        },
+        rawResponseCaller : function(a, b){
+
+        },
+        debug : true,
+        timeout : 4000,
+        respondWithProperty : 'rates',
+        retryOnFailure : {
+            fail : (info) => {// a 'global' callback when a failure occurs (good for logging or retry failures)
+                console.log('error ' , info);
+            },
+            min :  400, //min http response code
+            max :  600, //max http response code
+            retries   :  2, //number of retries
+            backOff :  100//backoff in ms * by retry count
+        }
+    });
+
+    let assert = require('assert');
+
+
+    it('fail', function(done) {
+
+        this.timeout(5000);
+
+        SimpleRestClient.get('test',{}, () => {
+            done('failed')
+        }, (err, headers, code) => {
+            assert.equal(JSON.stringify({ error : 'Not found' }),JSON.stringify( err));
+            assert.equal(404, code);
+            done();
+        })
+    });
+
+});
