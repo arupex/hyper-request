@@ -161,6 +161,9 @@ module.exports = (function () {
 
             function asynchronize(func) {
                 if (typeof func === 'function') {
+                    if(func.isSpreaderFunctions){
+                        return func;//its already async and also a spread function
+                    }
                     return function async(data, data2, data3) {
                         process.nextTick(func, data, data2, data3);
                     };
@@ -169,8 +172,8 @@ module.exports = (function () {
                 };
             }
 
-            let success = ok.isSpreaderFunctions?ok:asynchronize(ok);
-            let failure = fail.isSpreaderFunctions?fail:asynchronize(fail);
+            let success = asynchronize(ok);
+            let failure = asynchronize(fail);
             let asyncResponseCaller = asynchronize(rawResponseCaller);
 
             let requestOptions = {
@@ -215,6 +218,7 @@ module.exports = (function () {
             let responseData = '';
 
             const Transformer = new Transform({
+                highWaterMark : 16384 * 16,
                 transform(chunk, encoding, callback) {
                     responseData += chunk.toString('utf8');
                     callback(null, chunk);
@@ -328,6 +332,7 @@ module.exports = (function () {
             resultant.emit = Transformer.emit;
             resultant.removeListener = Transformer.removeListener;
             resultant.unpipe = Transformer.unpipe;
+            resultant.pause = Transformer.pause;
 
             return resultant;
         }
