@@ -56,6 +56,8 @@ module.exports = (function () {
             retryBackOff = opts.retryOnFailure.backOff || retryBackOff;
         }
 
+        let disablePipe = opts.disablePipe;
+
         function addCacheElement(key, value) {
             if (cacheKeys.length >= maxCacheKeys) {
                 delete cache[cacheKeys.shift()];
@@ -221,7 +223,7 @@ module.exports = (function () {
                 highWaterMark : 16384 * 16,
                 transform(chunk, encoding, callback) {
                     responseData += chunk.toString('utf8');
-                    callback(null, chunk);
+                    callback(null, disablePipe?null:chunk);
                 }
             });
 
