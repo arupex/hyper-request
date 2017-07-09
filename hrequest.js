@@ -204,7 +204,8 @@ module.exports = (function () {
                     });
             }
 
-            let cacheValue = getCacheElement(JSON.stringify(requestOptions));
+            let cacheKey = JSON.stringify(requestOptions);
+            let cacheValue = getCacheElement(cacheKey);
             if (cacheValue) {
                 return new Promise((resolve) => {
 
@@ -280,7 +281,7 @@ module.exports = (function () {
                                 }
                                 else {
                                     if (cacheTtl) {
-                                        addCacheElement(cacheValue, data);
+                                        addCacheElement(cacheKey, data);
                                     }
 
                                     if (debug) {
