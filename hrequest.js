@@ -57,6 +57,7 @@ module.exports = (function () {
         }
 
         let disablePipe = opts.disablePipe;
+        let respondWithObject = opts.respondWithObject;
 
         function addCacheElement(key, value) {
             if (cacheKeys.length >= maxCacheKeys) {
@@ -129,6 +130,23 @@ module.exports = (function () {
         //more perminant for this instance
         function setHeader(key, value) {
             headers[key] = value;
+        }
+
+        function getCookiesFromHeader(headers) {
+
+            if (!headers || !headers.cookie) {
+                return {};
+            }
+
+            return headers.cookie.split(';').reduce((cookies, cookie) => {
+                let parts = cookie.split('=');
+                let key = parts.shift().trim();
+                if (key !== '') {
+                    cookies[key] = decodeURI(parts.join('='));
+                }
+                return cookies;
+            }, {});
+
         }
 
         function doGet(endpoint, options, callback, failure) {
@@ -213,8 +231,8 @@ module.exports = (function () {
                         log(verb, endpoint, new Date().getTime());
                     }
 
-                    success(respondWithProperty ? cacheValue[respondWithProperty] : cacheValue);
-                    resolve(respondWithProperty ? cacheValue[respondWithProperty] : cacheValue);
+                    success(cacheValue);
+                    resolve(cacheValue);
                 });
             }
 
@@ -254,7 +272,19 @@ module.exports = (function () {
                             Transformer.on('finish', () => {
                                 let data = null;
                                 try {
-                                    data = parserFunction(responseData);
+                                    let minData = parserFunction(responseData);
+
+                                    if(respondWithObject) {
+                                        data = {
+                                            request : requestOptions,
+                                            headers : response.headers,
+                                            cookies : getCookiesFromHeader(response.headers),
+                                            body : respondWithProperty ? minData[respondWithProperty] : minData
+                                        };
+                                    }
+                                    else {
+                                        data = minData;
+                                    }
                                 }
                                 catch (e) {
                                     return badCB(e)
@@ -288,7 +318,7 @@ module.exports = (function () {
                                         log(verb, endpoint, new Date().getTime());
                                     }
 
-                                    goodCB(respondWithProperty ? data[respondWithProperty] : data, responseHeaders, data, responseCode);
+                                    goodCB(data, responseHeaders, data, responseCode);
                                 }
                             });
                         }

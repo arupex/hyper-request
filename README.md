@@ -15,9 +15,24 @@
         rawResponseCaller : function(a, b){
 
         },
+        retryOnFailure:{
+            fail : function(){},
+            min : 300.
+            max : 600,
+            retries : 5,
+            backOff : 10 //ms
+        },
+        respondWithObject : true, //returns headers and request as well
+        respondWithProperty : 'data', //returns response property as top level, if set to false it returns full body
         parserFunction : function(data){ return JSON.parse(data) } // optional ( defaults to JSON.parse
         timeout : 4000,
+        maxCacheKeys : 10,
         cacheTtl : 500
+    });
+    
+    SimpleRestClient.get('/endpoint', {
+        headers : {},
+        body : {}
     });
     
 #Callbacks
