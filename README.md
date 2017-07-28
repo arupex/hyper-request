@@ -27,7 +27,8 @@
         parserFunction : function(data){ return JSON.parse(data) } // optional ( defaults to JSON.parse
         timeout : 4000,
         maxCacheKeys : 10,
-        cacheTtl : 500
+        cacheTtl : 500,
+        highWaterMark : 16000//set the high water mark on the transform stream
     });
     
     SimpleRestClient.get('/endpoint', {

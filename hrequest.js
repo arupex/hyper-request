@@ -171,6 +171,10 @@ module.exports = (function () {
 
         function makeRequest(verb, endpoint, opts, ok, fail) {
 
+            if(!opts){
+                opts = {};
+            }
+
             if (retryOnFailure && typeof opts.retriesAttempted !== 'number') {
                 opts.retriesAttempted = 0;
             }
@@ -239,7 +243,7 @@ module.exports = (function () {
             let responseData = '';
 
             const Transformer = new Transform({
-                highWaterMark : 16384 * 16,
+                highWaterMark : (opts && opts.highWaterMark)?opts.highWaterMark:16384 * 16,
                 transform(chunk, encoding, callback) {
                     responseData += chunk.toString('utf8');
                     callback(null, disablePipe?null:chunk);
@@ -276,10 +280,12 @@ module.exports = (function () {
 
                                     if(respondWithObject) {
                                         data = {
+                                            code : response.statusCode,
                                             request : requestOptions,
                                             headers : response.headers,
                                             cookies : getCookiesFromHeader(response.headers),
-                                            body : respondWithProperty ? minData[respondWithProperty] : minData
+                                            body : respondWithProperty ? minData[respondWithProperty] : minData,
+                                            retries : opts.retriesAttempted
                                         };
                                     }
                                     else {

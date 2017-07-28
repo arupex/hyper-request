@@ -36,7 +36,7 @@ describe('SimpleRestClient Tests', function() {
                 assert.fail(err);
             });
 
-            done();
+            // done();
         }, function(err){
             done(err);
             assert.fail(err);
