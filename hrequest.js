@@ -43,16 +43,17 @@ module.exports = (function () {
         let cacheTtl = typeof opts.cacheTtl === 'number' ? opts.cacheTtl : 100;
 
         let retryOnFailure = !!opts.retryOnFailure;
-        let retryFailure =  () => {};
-        let retryMinCode =  400;
-        let retryMaxCode =  600;
-        let retryCount   =  5;
-        let retryBackOff =  100;
-        if(retryOnFailure){
+        let retryFailure = () => {
+        };
+        let retryMinCode = 400;
+        let retryMaxCode = 600;
+        let retryCount = 5;
+        let retryBackOff = 100;
+        if (retryOnFailure) {
             retryFailure = opts.retryOnFailure.fail || retryFailure;
             retryMinCode = opts.retryOnFailure.min || retryMinCode;
             retryMaxCode = opts.retryOnFailure.max || retryMaxCode;
-            retryCount   = opts.retryOnFailure.retries || retryCount;
+            retryCount = opts.retryOnFailure.retries || retryCount;
             retryBackOff = opts.retryOnFailure.backOff || retryBackOff;
         }
 
@@ -171,7 +172,7 @@ module.exports = (function () {
 
         function makeRequest(verb, endpoint, opts, ok, fail) {
 
-            if(!opts){
+            if (!opts) {
                 opts = {};
             }
 
@@ -185,7 +186,7 @@ module.exports = (function () {
 
             function asynchronize(func) {
                 if (typeof func === 'function') {
-                    if(func.isSpreaderFunctions){
+                    if (func.isSpreaderFunctions) {
                         return func;//its already async and also a spread function
                     }
                     return function async(data, data2, data3) {
@@ -206,7 +207,7 @@ module.exports = (function () {
                 host: baseUrl,
                 path: path.join(baseEndpoint || '', endpoint).replace('/?', '?'),
                 timeout: timeout,
-                agent: typeof opts.agent==='boolean'?opts.agent:false
+                agent: typeof opts.agent === 'boolean' ? opts.agent : false
             };
 
 
@@ -228,151 +229,202 @@ module.exports = (function () {
             }
 
             let cacheKey = JSON.stringify(requestOptions);
-            let cacheValue = getCacheElement(cacheKey);
-            if (cacheValue) {
-                return new Promise((resolve) => {
 
-                    if (debug) {
-                        log(verb, endpoint, new Date().getTime());
-                    }
+            if(cacheTtl) {
+                let cacheValue = getCacheElement(cacheKey);
+                if (cacheValue) {
+                    return new Promise((resolve) => {
 
-                    success(cacheValue);
-                    resolve(cacheValue);
-                });
+                        if (debug) {
+                            log(verb, endpoint, new Date().getTime());
+                        }
+
+                        success(cacheValue);
+                        resolve(cacheValue);
+                    });
+                }
             }
 
             let responseData = [];
 
             const Transformer = new Transform({
-                highWaterMark : (opts && opts.highWaterMark)?opts.highWaterMark:16384 * 16,
+                highWaterMark: (opts && opts.highWaterMark) ? opts.highWaterMark : 16384 * 16,
                 transform(chunk, encoding, callback) {
-                    responseData.push(chunk.toString('utf8'));
-                    callback(null, disablePipe?null:chunk);
+                    let items = chunk.toString('utf8');
+                    responseData.push(items);
+
+                    if (debug) {
+                        log('chunk', items);
+                    }
+
+                    callback(null, disablePipe ? null : chunk);
                 }
             });
 
             let resultant = new Promise((resolve, reject) => {
 
 
-                let goodCB = success.isSpreaderFunctions?success:spreader(resolve, success);
-                let badCB = failure.isSpreaderFunctions?failure:spreader(reject, failure);
+                let goodCB = success.isSpreaderFunctions ? success : spreader(resolve, success);
+                let badCB = failure.isSpreaderFunctions ? failure : spreader(reject, failure);
 
-                    let responseCode;
-                    let responseHeaders;
+                let responseCode;
+                let responseHeaders;
 
-                    const req = (protocol.indexOf('https') === -1 ? http : https).request(requestOptions,
-                        function (response) {
+                function responder(response) {
 
-                            responseCode = response.statusCode;
+                    responseCode = response.statusCode;
 
-                            responseHeaders = response.headers;
+                    responseHeaders = response.headers;
 
-                            if (['gzip', 'deflate'].indexOf(response.headers['content-encoding']) !== -1) {
-                                response.pipe(zlib.createUnzip()).pipe(Transformer);
+                    let contentEncoding = response.headers['content-encoding'];
+                    if(typeof contentEncoding === 'string'){
+                        contentEncoding = contentEncoding.toLowerCase();
+                    }
+
+                    if (contentEncoding && ['gzip', 'deflate'].indexOf(contentEncoding) !== -1) {
+                        response.pipe(zlib.createUnzip()).pipe(Transformer);
+                    }
+                    else {
+                        response.pipe(Transformer);
+                    }
+
+                    Transformer.on('finish', () => {
+                        let data = null;
+                        try {
+                            let stringedResponse = responseData.join('');
+                            let minData = '';
+
+                            if(stringedResponse){
+                                minData = parserFunction(stringedResponse);
                             }
                             else {
-                                response.pipe(Transformer);
+                                if (debug) {
+                                    log('raw response data', responseData, response.statusCode, response.headers);
+                                }
+                                throw new Error('No Content');
                             }
 
-                            Transformer.on('finish', () => {
-                                let data = null;
-                                try {
-                                    let minData = parserFunction(responseData.join(''));
-
-                                    if(respondWithObject) {
-                                        data = {
-                                            code : response.statusCode,
-                                            request : requestOptions,
-                                            headers : response.headers,
-                                            cookies : getCookiesFromHeader(response.headers),
-                                            body : respondWithProperty ? minData[respondWithProperty] : minData,
-                                            retries : opts.retriesAttempted
-                                        };
-                                    }
-                                    else {
-                                        data = minData;
-                                    }
-                                }
-                                catch (e) {
-                                    return badCB(e)
-                                }
-
-                                asyncResponseCaller(response, data, responseHeaders);
-
-                                if (failWhenBadCode && responseCode >= 400) {
-                                    opts.retriesAttempted++;
-
-                                    if (retryOnFailure && (retryMaxCode >= responseCode) && (retryMinCode <= responseCode) && (opts.retriesAttempted < retryCount)) {
-
-                                        setTimeout(() => {
-                                                makeRequest(verb, endpoint, opts, goodCB, badCB);
-                                        }, retryBackOff * opts.retriesAttempted);
-
-                                    }
-                                    else {
-                                        if(retryOnFailure && responseCode <= retryMaxCode && responseCode >= retryMinCode){
-                                            retryFailure(data, responseHeaders);
-                                        }
-                                        badCB(data, responseHeaders, responseCode);
-                                    }
-                                }
-                                else {
-                                    if (cacheTtl) {
-                                        addCacheElement(cacheKey, data);
-                                    }
-
-                                    if (debug) {
-                                        log(verb, endpoint, new Date().getTime());
-                                    }
-
-                                    goodCB(data, responseHeaders, data, responseCode);
-                                }
-                            });
+                            if (respondWithObject) {
+                                data = {
+                                    code: response.statusCode,
+                                    request: requestOptions,
+                                    headers: response.headers,
+                                    cookies: getCookiesFromHeader(response.headers),
+                                    body: respondWithProperty ? minData[respondWithProperty] : minData,
+                                    retries: opts.retriesAttempted
+                                };
+                            }
+                            else {
+                                data = minData;
+                            }
                         }
-                    );
+                        catch (e) {
 
-                    req.on('error', (err) => {
+                            if (debug) {
+                                log('raw response data', responseData);
+                            }
 
-                        if (debug) {
-                            log(verb, endpoint, new Date().getTime());
+                            if(retryOnFailure && opts.retriesAttempted < retryCount) {
+                                setTimeout(() => {
+                                    makeRequest(verb, endpoint, opts, goodCB, badCB);
+                                }, retryBackOff * opts.retriesAttempted);
+                                return;
+                            }
+                            else {
+                                return badCB(e)
+                            }
                         }
 
-                        asyncResponseCaller(req);
+                        asyncResponseCaller(response, data, responseHeaders);
+
+                        if (failWhenBadCode && responseCode >= 400) {
+                            opts.retriesAttempted++;
+
+                            if (retryOnFailure && (retryMaxCode >= responseCode) && (retryMinCode <= responseCode) && (opts.retriesAttempted < retryCount)) {
+
+                                setTimeout(() => {
+                                    makeRequest(verb, endpoint, opts, goodCB, badCB);
+                                }, retryBackOff * opts.retriesAttempted);
+                                return;
+
+                            }
+                            else {
+                                if (retryOnFailure && responseCode <= retryMaxCode && responseCode >= retryMinCode) {
+                                    retryFailure(data, responseHeaders);
+                                }
+                                badCB(data, responseHeaders, responseCode);
+                            }
+                        }
+                        else {
+                            if (cacheTtl) {
+                                addCacheElement(cacheKey, data);
+                            }
+
+                            if (debug) {
+                                log(verb, endpoint, new Date().getTime());
+                            }
+
+                            goodCB(data, responseHeaders, data, responseCode);
+                        }
+                    });
+
+                    Transformer.on('error', (err) => {
+                        log('transform error', err);
                         badCB(err);
                     });
 
-                    req.on('timeout', () => {
+                }
 
-                        if (debug) {
-                            log(verb, endpoint, new Date().getTime());
-                        }
+                if (debug) {
+                    log(requestOptions);
+                }
 
-                        let error = new Error('timeout');
-                        asyncResponseCaller(error);
-                        badCB(error);
-                    });
+                const req = (protocol.indexOf('https') === -1 ? http : https).request(requestOptions, responder);
 
-                    if (postData) {
-                        req.write(postData);
+                req.on('error', (err) => {
+
+                    if (debug) {
+                        log(verb, endpoint, new Date().getTime());
                     }
-                    req.end();
+
+                    asyncResponseCaller(req);
+                    badCB(err);
                 });
 
-            Object.assign(resultant, Transformer);
+                req.on('timeout', () => {
 
-            //hack!
-            resultant.pipe = Transformer.pipe;
-            resultant.once = Transformer.once;
-            resultant.on = Transformer.on;
-            resultant.resume = Transformer.resume;
-            resultant.read = Transformer.read;
-            resultant.write = Transformer.write;
-            resultant._read = Transformer._read;
-            resultant._write = Transformer._write;
-            resultant.emit = Transformer.emit;
-            resultant.removeListener = Transformer.removeListener;
-            resultant.unpipe = Transformer.unpipe;
-            resultant.pause = Transformer.pause;
+                    if (debug) {
+                        log(verb, endpoint, new Date().getTime());
+                    }
+
+                    let error = new Error('timeout');
+                    asyncResponseCaller(error);
+                    badCB(error);
+                });
+
+                if (postData) {
+                    req.write(postData);
+                }
+                req.end();
+            });
+
+            if(!disablePipe) {
+                Object.assign(resultant, Transformer);
+
+                //hack!
+                resultant.pipe = Transformer.pipe;
+                resultant.once = Transformer.once;
+                resultant.on = Transformer.on;
+                resultant.resume = Transformer.resume;
+                resultant.read = Transformer.read;
+                resultant.write = Transformer.write;
+                resultant._read = Transformer._read;
+                resultant._write = Transformer._write;
+                resultant.emit = Transformer.emit;
+                resultant.removeListener = Transformer.removeListener;
+                resultant.unpipe = Transformer.unpipe;
+                resultant.pause = Transformer.pause;
+            }
 
             return resultant;
         }
