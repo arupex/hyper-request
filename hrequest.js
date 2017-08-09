@@ -205,7 +205,8 @@ module.exports = (function () {
                 protocol: protocol,
                 host: baseUrl,
                 path: path.join(baseEndpoint || '', endpoint).replace('/?', '?'),
-                timeout: timeout
+                timeout: timeout,
+                agent: typeof opts.agent==='boolean'?opts.agent:false
             };
 
 
@@ -240,12 +241,12 @@ module.exports = (function () {
                 });
             }
 
-            let responseData = '';
+            let responseData = [];
 
             const Transformer = new Transform({
                 highWaterMark : (opts && opts.highWaterMark)?opts.highWaterMark:16384 * 16,
                 transform(chunk, encoding, callback) {
-                    responseData += chunk.toString('utf8');
+                    responseData.push(chunk.toString('utf8'));
                     callback(null, disablePipe?null:chunk);
                 }
             });
@@ -276,7 +277,7 @@ module.exports = (function () {
                             Transformer.on('finish', () => {
                                 let data = null;
                                 try {
-                                    let minData = parserFunction(responseData);
+                                    let minData = parserFunction(responseData.join(''));
 
                                     if(respondWithObject) {
                                         data = {
