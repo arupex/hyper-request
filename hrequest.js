@@ -86,6 +86,7 @@ module.exports = (function () {
         let protocol = opts.protocol ? opts.protocol : url.protocol;
         let baseUrl = url.host;
         let baseEndpoint = url.path;
+        let port = opts.port || url.port || '80';
 
         let parserFunction = opts.parserFunction || JSON.parse;
 
@@ -204,6 +205,7 @@ module.exports = (function () {
             let requestOptions = {
                 method: verb,
                 protocol: protocol,
+                port : port,
                 host: baseUrl,
                 path: path.join(baseEndpoint || '', endpoint).replace('/?', '?'),
                 timeout: timeout,
