@@ -84,7 +84,7 @@ module.exports = (function () {
 
         let log = defaultLogger;
         let protocol = opts.protocol ? opts.protocol : url.protocol;
-        let baseUrl = url.host;
+        let baseUrl = url.hostname;
         let baseEndpoint = url.path;
         let port = opts.port || url.port || '80';
 
