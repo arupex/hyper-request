@@ -83,10 +83,10 @@ module.exports = (function () {
         let url = URL.parse(opts.baseUrl);
 
         let log = defaultLogger;
-        let protocol = opts.protocol ? opts.protocol : url.protocol;
+        let protocol = (opts.protocol ? opts.protocol : url.protocol) || 'http:';
         let baseUrl = url.hostname;
         let baseEndpoint = url.path;
-        let port = opts.port || url.port || '80';
+        let port = opts.port || url.port || (protocol.indexOf('https')>-1?'443':'80');
 
         let parserFunction = opts.parserFunction || JSON.parse;
 
