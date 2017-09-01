@@ -318,6 +318,7 @@ module.exports = (function () {
                             }
                             else {
                                 data = minData;
+                                // data = respondWithProperty?minData[respondWithProperty]:minData;
                             }
                         }
                         catch (e) {
@@ -366,7 +367,9 @@ module.exports = (function () {
                                 log(verb, endpoint, new Date().getTime());
                             }
 
-                            goodCB(data, responseHeaders, data, responseCode);
+                            let r = (!respondWithObject&&respondWithProperty)?data[respondWithProperty]:data;
+
+                            goodCB(r, responseHeaders, r, responseCode);
                         }
                     });
 
