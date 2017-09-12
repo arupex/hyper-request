@@ -76,7 +76,11 @@ module.exports = (function () {
         }
 
         function getCacheElement(key) {
-            return cache[key] ? cache[key].value : null;
+            let value = cache[key] ? cache[key].value : null;
+            if(!opts.cacheByReference){
+                value = JSON.parse(JSON.stringify(value));
+            }
+            return value;
         }
 
 
