@@ -57,7 +57,7 @@ module.exports = (function () {
             retryBackOff = opts.retryOnFailure.backOff || retryBackOff;
         }
 
-        let disablePipe = opts.disablePipe;
+        let enablePipe = opts.enablePipe;
         let respondWithObject = opts.respondWithObject;
 
         function addCacheElement(key, value) {
@@ -256,14 +256,14 @@ module.exports = (function () {
             const Transformer = new Transform({
                 highWaterMark: (opts && opts.highWaterMark) ? opts.highWaterMark : 16384 * 16,
                 transform(chunk, encoding, callback) {
-                    let items = chunk.toString('utf8');
-                    responseData.push(items);
-
-                    if (debug) {
-                        log('chunk', items);
+                    if(enablePipe) {
+                        callback(null, chunk);
+                    }
+                    else {
+                        responseData.push(chunk.toString('utf8'));
+                        callback(null, null);
                     }
 
-                    callback(null, disablePipe ? null : chunk);
                 }
             });
 
@@ -417,7 +417,7 @@ module.exports = (function () {
                 req.end();
             });
 
-            if(!disablePipe) {
+            if(enablePipe) {
                 Object.assign(resultant, Transformer);
 
                 //hack!

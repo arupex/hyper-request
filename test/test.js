@@ -68,6 +68,16 @@ describe('SimpleRestClient Tests', function(){
 
 
     it('streams', function(done) {
+        var SimpleRestClient = require('../hrequest')({
+            baseUrl : 'http://api.fixer.io/',
+            customLogger : function(){},
+            rawResponseCaller : function(a, b){
+
+            },
+            enablePipe : true,
+            timeout : 4000,
+            respondWithProperty: 'rates'
+        });
 
         let Writable = require('stream').Writable;
         const myBadAssStream = new Writable({

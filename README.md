@@ -28,6 +28,7 @@
         timeout : 4000,
         maxCacheKeys : 10,
         cacheTtl : 500,
+        enablePipe : false,
         highWaterMark : 16000//set the high water mark on the transform stream
         cacheByReference : false // if true cache returns back the object returned in itself, does not return a copy, thus is mutable
     });
