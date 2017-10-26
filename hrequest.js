@@ -238,7 +238,7 @@ module.exports = (function () {
             if(cacheTtl) {
                 let cacheValue = getCacheElement(cacheKey);
                 if (cacheValue) {
-                    let readIn = (respondWithProperty)?cacheValue[respondWithProperty]:cacheValue;
+                    let readIn = (!respondWithObject&&respondWithProperty)?cacheValue[respondWithProperty]:cacheValue;
                     return new Promise((resolve) => {
 
                         if (debug) {
