@@ -6,7 +6,6 @@ module.exports = (function () {
     let path = require('path');
     let zlib = require('zlib');
     let Transform = require('stream').Transform;
-    const util = require('util');
 
     const GET = 'GET';
     const PATCH = 'PATCH';
@@ -127,7 +126,7 @@ module.exports = (function () {
 
         //this temporarily changes the headers
         function extendHeaders(headers, internalHeaders) {
-            for (var h in internalHeaders) {
+            for (let h in internalHeaders) {
                 headers[h] = internalHeaders[h];
             }
             return headers;
@@ -239,14 +238,15 @@ module.exports = (function () {
             if(cacheTtl) {
                 let cacheValue = getCacheElement(cacheKey);
                 if (cacheValue) {
+                    let readIn = (respondWithProperty)?cacheValue[respondWithProperty]:cacheValue;
                     return new Promise((resolve) => {
 
                         if (debug) {
                             log(verb, endpoint, new Date().getTime());
                         }
 
-                        success(cacheValue);
-                        resolve(cacheValue);
+                        success(readIn);
+                        resolve(readIn);
                     });
                 }
             }
