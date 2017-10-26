@@ -71,7 +71,7 @@ module.exports = (function () {
                     cacheKeys = cacheKeys.filter(testKey => testKey === key);
                     delete cache[key];
                 }, cacheTtl),
-                value: value
+                value: JSON.parse(JSON.stringify(value))
             };
         }
 
