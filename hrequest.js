@@ -80,7 +80,7 @@ module.exports = (function () {
         }
 
         let enablePipe = constructorOpts.enablePipe;
-        let respondWithObject = constructorOpts.respondWithObject;
+        let respondWithObject = constructorOpts.respondWithObject === true;
 
         function clone(data){
             return data?JSON.parse(JSON.stringify(data)):data;
