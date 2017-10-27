@@ -135,6 +135,8 @@ module.exports = (function () {
         let rawResponseCaller = typeof constructorOpts.rawResponseCaller !== 'function' ? function () {
         } : constructorOpts.rawResponseCaller;
 
+        let auditor = function(a,b,c) { process.nextTick(rawResponseCaller, a, b, c) };
+
         let respondWithProperty = typeof constructorOpts.respondWithProperty !== 'boolean' ? (constructorOpts.respondWithProperty || 'data') : false;//set to false if you want everything!
 
         let headers = clone({
@@ -196,34 +198,21 @@ module.exports = (function () {
                 options = {};
             }
 
-            let apromise = asyncPromise(makeRequest(verb, endpoint, options));
+            let res = makeRequest(verb, endpoint, options);
 
 
             if(typeof callback === 'function' && typeof failure === 'function') {
-                return apromise.then(callback, failure);
+                return res.then(callback, failure);
             }
             else if(typeof options === 'function' && typeof callback === 'function') {
-                return apromise.then(options, callback);
+                return res.then(options, callback);
             }
             else if(typeof callback === 'function'){
-                return apromise.then((data) => {callback(null, data)}, (err) => {callback(err)});
+                return res.then((data) => {callback(null, data)}, (err) => {callback(err)});
             }
             else {
-                return apromise;
+                return res;
             }
-        }
-
-        function asyncPromise(promise){
-           promise.then((data) => {
-               return new Promise((resolve => {
-                   process.nextTick(resolve, data);
-               }));
-           }, (err) => {
-               return new Promise((resolve,reject => {
-                   process.nextTick(reject, err);
-               }));
-           });
-           return promise;
         }
 
         function calcRequestOpts(verb, endpoint, opts, postData) {
@@ -257,17 +246,6 @@ module.exports = (function () {
             return requestOptions;
         }
 
-
-        function asynchronize(func) {
-            if (typeof func === 'function') {
-                return function async(data, data2, data3, data4) {
-                    process.nextTick(func, data, data2, data3, data4);
-                };
-            }
-            return function () {};
-        }
-
-
         let retry = function (verb, endpoint, opts, retrysSoFar) {
             return new Promise( (resolve, reject) => {
                 return setTimeout(() => {
@@ -295,7 +273,6 @@ module.exports = (function () {
                 log(verb, endpoint, new Date().getTime());
             }
 
-            let auditor = asynchronize(rawResponseCaller);
 
             const postData = typeof opts.body !== 'undefined' ? JSON.stringify(opts.body) : null;
             let requestOptions = calcRequestOpts(verb, endpoint, opts, postData);
@@ -334,11 +311,9 @@ module.exports = (function () {
             });
 
 
-            let resultant = new Promise((a, b) => {
-                let resolve = asynchronize(a);
-                let reject = asynchronize(b);
+            let resultant = new Promise((resolve, reject) => {
 
-                let responder = function responder(response) {
+                const req = (protocol.indexOf('https') === -1 ? http : https).request(requestOptions, function responder(response) {
 
                     if ((typeof response.headers['content-encoding'] === 'string') &&
                         ['gzip', 'deflate'].indexOf(response.headers['content-encoding'].toLowerCase()) !== -1) {
@@ -386,9 +361,7 @@ module.exports = (function () {
                         reject(err || new Error('unknown transform stream error'));
                     });
 
-                };
-
-                const req = (protocol.indexOf('https') === -1 ? http : https).request(requestOptions, responder);
+                });
 
                 let createError = function createError(name){
                     return function (err) {
