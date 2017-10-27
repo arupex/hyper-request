@@ -23,7 +23,7 @@ describe('SimpleRestClient Tests', function() {
 
     var assert = require('chai').assert;
 
-    it('get currency', function(done){
+    it('get currency read rates property check nested calls respondWithObject', function(done){
         this.timeout(15000);
         SimpleRestClient.get('?symbols=USD,GBP', {
         }, function(data1){

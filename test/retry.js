@@ -10,7 +10,7 @@ describe('retry', () => {
         baseUrl : 'http://api.fixer.io/thisdoesnotexist',
         basicAuthToken : '',
         customLogger : function(verb, endpoint, time){
-            console.log(verb, endpoint, time);
+            // console.log(verb, endpoint, time);
         },
         rawResponseCaller : function(a, b){
 
@@ -18,9 +18,10 @@ describe('retry', () => {
         debug : true,
         timeout : 4000,
         respondWithProperty : 'rates',
+        respondWithObject : true,
         retryOnFailure : {
             fail : (info) => {// a 'global' callback when a failure occurs (good for logging or retry failures)
-                console.log('error ' , info);
+                // console.log('error ' , info);
             },
             min :  400, //min http response code
             max :  600, //max http response code
@@ -32,15 +33,15 @@ describe('retry', () => {
     let assert = require('assert');
 
 
-    it('fail', function(done) {
+    it('should fail with 404', function(done) {
 
         this.timeout(5000);
 
         SimpleRestClient.get('test',{}, () => {
             done('failed')
-        }, (err, headers, code) => {
-            assert.equal(JSON.stringify({ error : 'Not found' }),JSON.stringify( err));
-            assert.equal(404, code);
+        }, (err) => {
+            assert.equal(JSON.stringify({ error : 'Not found' }),JSON.stringify( err.body));
+            assert.equal(404, err.code);
             done();
         })
     });

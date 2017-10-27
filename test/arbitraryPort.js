@@ -1,18 +1,30 @@
 describe('SimpleRestClient Tests', function() {
 
-    var SimpleRestClient = require('../hrequest')({
-        baseUrl: 'http://localhost:8888/',
-    });
-
     var assert = require('chai').assert;
 
-    it('get channels', function (done) {
+    it('get portquiz with port', function (done) {
 
-        SimpleRestClient.get('/api/v1/savings?space_id=7&start_date=2017-08-10&end_date=2017-08-10', {})
-        .then(function (data) {
+        this.timeout(60000);
+
+        var SimpleRestClient = require('../hrequest')({
+            baseUrl: 'http://localhost:1337/',
+            parserFunction : (data) => {
+                console.log('data', data);
+                return data;//cuz its html
+            },
+            respondWithProperty : false
+        });
+
+        SimpleRestClient.get('',{}).then(function (data) {
+            console.log('data', data);
+
+            let bool = data.includes('Preload some data for performance');
+
+            console.log('bool', bool);
+            assert.ok(bool);
             done();
         }, function (err) {
-            assert.fail(err);
+            done(err || new Error('unknown'));
         });
 
     });

@@ -11,7 +11,7 @@ describe('SimpleRestClient Tests', function() {
 
     let assert = require('chai').assert;
 
-    it('get currency', function(done){
+    it('get currency usd jan 2nd and expect value deep read rates property', function(done){
         this.timeout(2500);
         SimpleRestClient.get('2017-01-02?symbols=USD', {}).then( (data) => {
             console.log('got', data);
