@@ -7,130 +7,145 @@ module.exports = (function () {
     let zlib = require('zlib');
     let Transform = require('stream').Transform;
 
-    const GET = 'GET';
-    const PATCH = 'PATCH';
-    const POST = 'POST';
-    const PUT = 'PUT';
-    const DELETE = 'DELETE';
-
-    let defaultLogger = function (info) {
-    };
-
-    function spreader() {
-        let argz = arguments;
-        let result = function (a, b, c, d, e, f) {
-            for (let i = 0; i < argz.length; ++i) {
-                if (typeof argz[i] === 'function') {
-                    argz[i](a, b, c, d, e, f)//.apply(arguments);
-                }
-            }
-        };
-        result.isSpreaderFunctions = true;
-        return result;
-    }
-
     let URL = require('url');
 
+    let defaultLogger = function (info) {};
+
+
+    let extendStream = function (resultant, Transformer) {
+        Object.assign(resultant, Transformer);
+
+        //hack!
+        resultant.pipe = Transformer.pipe;
+        resultant.once = Transformer.once;
+        resultant.on = Transformer.on;
+        resultant.resume = Transformer.resume;
+        resultant.read = Transformer.read;
+        resultant.write = Transformer.write;
+        resultant._read = Transformer._read;
+        resultant._write = Transformer._write;
+        resultant.emit = Transformer.emit;
+        resultant.removeListener = Transformer.removeListener;
+        resultant.unpipe = Transformer.unpipe;
+        resultant.pause = Transformer.pause;
+
+        return resultant;
+    };
     /**
-     * @param opts - { protocol : 'http://', baseUrl : 'fixer.io' }
+     * @param opts - {
+     *                   baseUrl : 'http://api.fixer.io/latest',
+     *                   customLogger : function(){},
+     *                   rawResponseCaller : function(a, b){
+     *
+     *                   },
+     *                   retryOnFailure:{
+     *                       fail : function(){},
+     *                       min : 300.
+     *                       max : 600,
+     *                       retries : 5,
+     *                       backOff : 10 //ms
+     *                   },
+     *                   respondWithObject : true, //returns headers and request as well
+     *                   respondWithProperty : 'data', //returns response property as top level, if set to false it returns full body
+     *                   parserFunction : function(data){ return JSON.parse(data) } // optional ( defaults to JSON.parse
+     *                   timeout : 4000,
+     *                   maxCacheKeys : 10,
+     *                   cacheTtl : 500,
+     *                   enablePipe : false,
+     *                   highWaterMark : 16000//set the high water mark on the transform stream
+     *                   cacheByReference : false // if true cache returns back the object returned in itself, does not return a copy, thus is mutable
+     *               }
      */
-    return function HyperRequest(opts) {
+    return function HyperRequest(constructorOpts) {
+
 
         let cache = {};
         let cacheKeys = [];
-        let maxCacheKeys = typeof opts.maxCacheKeys === 'number' ? opts.maxCacheKeys : 100;
-        let cacheTtl = typeof opts.cacheTtl === 'number' ? opts.cacheTtl : 100;
+        let maxCacheKeys = typeof constructorOpts.maxCacheKeys === 'number' ? constructorOpts.maxCacheKeys : 100;
+        let cacheTtl = typeof constructorOpts.cacheTtl === 'number' ? constructorOpts.cacheTtl : 100;
 
-        let retryOnFailure = !!opts.retryOnFailure;
-        let retryFailure = () => {
-        };
+        let retryOnFail = !!constructorOpts.retryOnFailure;
+        let retryFailureLogger = () => {};
         let retryMinCode = 400;
         let retryMaxCode = 600;
         let retryCount = 5;
         let retryBackOff = 100;
-        if (retryOnFailure) {
-            retryFailure = opts.retryOnFailure.fail || retryFailure;
-            retryMinCode = opts.retryOnFailure.min || retryMinCode;
-            retryMaxCode = opts.retryOnFailure.max || retryMaxCode;
-            retryCount = opts.retryOnFailure.retries || retryCount;
-            retryBackOff = opts.retryOnFailure.backOff || retryBackOff;
+
+        if (retryOnFail) {
+            retryFailureLogger = constructorOpts.retryOnFailure.fail || retryFailureLogger;
+            retryMinCode = constructorOpts.retryOnFailure.min || retryMinCode;
+            retryMaxCode = constructorOpts.retryOnFailure.max || retryMaxCode;
+            retryCount = constructorOpts.retryOnFailure.retries || retryCount;
+            retryBackOff = constructorOpts.retryOnFailure.backOff || retryBackOff;
         }
 
-        let enablePipe = opts.enablePipe;
-        let respondWithObject = opts.respondWithObject;
+        let enablePipe = constructorOpts.enablePipe;
+        let respondWithObject = constructorOpts.respondWithObject === true;
+
+        function clone(data){
+            return data?JSON.parse(JSON.stringify(data)):data;
+        }
 
         function addCacheElement(key, value) {
-            if (cacheKeys.length >= maxCacheKeys) {
-                delete cache[cacheKeys.shift()];
-            }
-            cacheKeys.push(key);
+            if(cacheTtl) {
+                if (cacheKeys.length >= maxCacheKeys) {
+                    delete cache[cacheKeys.shift()];
+                }
+                cacheKeys.push(key);
 
-            cache[key] = {
-                lastInvokeTimeout: setTimeout(function () {
-                    cacheKeys = cacheKeys.filter(testKey => testKey === key);
-                    delete cache[key];
-                }, cacheTtl),
-                value: JSON.parse(JSON.stringify(value))
-            };
+                cache[key] = {
+                    lastInvokeTimeout: setTimeout(function () {
+                        cacheKeys = cacheKeys.filter(testKey => testKey === key);
+                        delete cache[key];
+                    }, cacheTtl),
+                    value: clone(value)
+                };
+            }
+            return value;
         }
 
         function getCacheElement(key) {
             let value = cache[key] ? cache[key].value : null;
-            if(!opts.cacheByReference){
-                value = JSON.parse(JSON.stringify(value));
+            if(!constructorOpts.cacheByReference){
+                value = clone(value);
             }
             return value;
         }
 
 
-        let url = URL.parse(opts.baseUrl);
+        let url = URL.parse(constructorOpts.baseUrl);
 
-        let log = defaultLogger;
-        let protocol = (opts.protocol ? opts.protocol : url.protocol) || 'http:';
+        let log = typeof constructorOpts.customLogger === 'function'?constructorOpts.customLogger:defaultLogger;
+        let protocol = (constructorOpts.protocol ? constructorOpts.protocol : url.protocol) || 'http:';
         let baseUrl = url.hostname;
         let baseEndpoint = url.path;
-        let port = opts.port || url.port || (protocol.indexOf('https')>-1?'443':'80');
+        let port = constructorOpts.port || url.port || (protocol.indexOf('https')>-1?'443':'80');
+        let agent = (protocol==='http:')?new http.Agent({ keepAlive: true }):new https.Agent({ keepAlive: true });
+        let parserFunction = constructorOpts.parserFunction || JSON.parse;
 
-        let parserFunction = opts.parserFunction || JSON.parse;
+        let debug = typeof constructorOpts.debug === 'boolean' ? constructorOpts.debug : false;
 
-        let debug = typeof opts.debug === 'boolean' ? opts.debug : false;
+        let timeout = constructorOpts.timeout || 60000;
 
-        let timeout = opts.timeout || 60000;
+        let basicAuthToken = constructorOpts.basicAuthToken;
+        let basicAuthSecret = constructorOpts.basicAuthSecret;
+        let gzip = typeof constructorOpts.gzip !== 'boolean' ? true : constructorOpts.gzip;
+        let failWhenBadCode = typeof constructorOpts.failWhenBadCode !== 'boolean' ? true : constructorOpts.failWhenBadCode;
 
-        let basicAuthToken = opts.basicAuthToken;
-        let basicAuthSecret = opts.basicAuthSecret;
-        let gzip = typeof opts.gzip !== 'boolean' ? true : opts.gzip;
-        let failWhenBadCode = typeof opts.failWhenBadCode !== 'boolean' ? true : opts.failWhenBadCode;
+        let rawResponseCaller = typeof constructorOpts.rawResponseCaller !== 'function' ? function () {
+        } : constructorOpts.rawResponseCaller;
 
-        let rawResponseCaller = typeof opts.rawResponseCaller !== 'function' ? function () {
-        } : opts.rawResponseCaller;
+        let auditor = function(a,b,c) { process.nextTick(rawResponseCaller, a, b, c) };
 
-        let respondWithProperty = typeof opts.respondWithProperty !== 'boolean' ? (opts.respondWithProperty || 'data') : false;//set to false if you want everything!
+        let respondWithProperty = typeof constructorOpts.respondWithProperty !== 'boolean' ? (constructorOpts.respondWithProperty || 'data') : false;//set to false if you want everything!
 
-        if (opts.customLogger) {
-            log = opts.customLogger;
-        }
-
-        let headers = {
+        let headers = clone({
             'User-Agent': 'request',
             'Content-Type': 'application/json',
-            'Accept': 'application/json'
-        };
-        if (gzip) {
-            headers['Accept-Encoding'] = 'gzip, deflate';
-        }
-
-        if (basicAuthToken) {
-            headers.Authorization = 'Basic ' + (new Buffer(basicAuthToken + ':' + (basicAuthSecret ? basicAuthSecret : ''), 'utf8')).toString('base64');//'Basic ' + btoa(basicAuthToken+':');
-        }
-
-        //this temporarily changes the headers
-        function extendHeaders(headers, internalHeaders) {
-            for (let h in internalHeaders) {
-                headers[h] = internalHeaders[h];
-            }
-            return headers;
-        }
+            'Accept': 'application/json',
+            'Accept-Encoding' : gzip?'gzip, deflate':undefined,
+            Authorization : basicAuthToken?('Basic ' + (new Buffer(basicAuthToken + ':' + (basicAuthSecret ? basicAuthSecret : ''), 'utf8')).toString('base64')):undefined
+        });
 
         //more perminant for this instance
         function setHeader(key, value) {
@@ -155,32 +170,102 @@ module.exports = (function () {
         }
 
         function doGet(endpoint, options, callback, failure) {
-            return this.makeRequest(GET, endpoint, options, callback, failure);
+            return handleCallbackOrPromise('GET', endpoint, options, callback, failure);
         }
 
         function doPost(endpoint, options, callback, failure) {
-            return this.makeRequest(POST, endpoint, options, callback, failure);
+            return handleCallbackOrPromise('POST', endpoint, options, callback, failure);
         }
 
         function doDelete(endpoint, options, callback, failure) {
-            return this.makeRequest(DELETE, endpoint, options, callback, failure);
+            return handleCallbackOrPromise('DELETE', endpoint, options, callback, failure);
         }
 
         function doPut(endpoint, options, callback, failure) {
-            return this.makeRequest(PUT, endpoint, options, callback, failure);
+            return handleCallbackOrPromise('PUT', endpoint, options, callback, failure);
         }
 
         function doPatch(endpoint, options, callback, failure) {
-            return this.makeRequest(PATCH, endpoint, options, callback, failure);
+            return handleCallbackOrPromise('PATCH', endpoint, options, callback, failure);
         }
 
-        function makeRequest(verb, endpoint, opts, ok, fail) {
+        function handleCallbackOrPromise(verb, endpoint, options, callback, failure){
+            if(typeof endpoint === 'undefined') {
+                endpoint = '';
+            }
 
-            if (!opts) {
+            if(typeof options === 'undefined'){
+                options = {};
+            }
+
+            let res = makeRequest(verb, endpoint, options);
+
+
+            if(typeof callback === 'function' && typeof failure === 'function') {
+                return res.then(callback, failure);
+            }
+            else if(typeof options === 'function' && typeof callback === 'function') {
+                return res.then(options, callback);
+            }
+            else if(typeof callback === 'function'){
+                return res.then((data) => {callback(null, data)}, (err) => {callback(err)});
+            }
+            else {
+                return res;
+            }
+        }
+
+        function calcRequestOpts(verb, endpoint, opts, postData) {
+            let requestOptions = {
+                method: verb,
+                protocol: protocol,
+                port: port,
+                host: baseUrl,
+                path: path.join(baseEndpoint || '', endpoint).replace('/?', '?'),
+                timeout: timeout,
+                agent: (typeof opts.agent === 'boolean') ? opts.agent : agent
+            };
+
+
+            if (typeof opts.headers === 'object') {
+                requestOptions.headers = Object.assign({}, headers, opts.headers);
+            }
+            else {
+                requestOptions.headers = headers;
+            }
+
+            if (postData) {
+                requestOptions.headers = Object.assign({}, requestOptions.headers,
+                    {
+                        'Content-Length': Buffer.byteLength(postData)
+                    });
+            }
+            if(debug) {
+                console.log('request opts', requestOptions);
+            }
+            return requestOptions;
+        }
+
+        let retry = function (verb, endpoint, opts, retrysSoFar) {
+            return new Promise( (resolve, reject) => {
+                return setTimeout(() => {
+                    makeRequest(verb, endpoint, opts).then(resolve, reject);
+                }, retryBackOff * (retrysSoFar));
+            });
+        };
+
+
+        let failedDueToBadCode = function (statusCode) {
+            return (failWhenBadCode && statusCode >= 400) && (retryMaxCode >= statusCode) && (retryMinCode <= statusCode);
+        };
+
+        function makeRequest(verb, endpoint, opts) {
+
+            if (typeof opts !== 'object') {
                 opts = {};
             }
 
-            if (retryOnFailure && typeof opts.retriesAttempted !== 'number') {
+            if (retryOnFail && typeof opts.retriesAttempted !== 'number') {
                 opts.retriesAttempted = 0;
             }
 
@@ -188,65 +273,22 @@ module.exports = (function () {
                 log(verb, endpoint, new Date().getTime());
             }
 
-            function asynchronize(func) {
-                if (typeof func === 'function') {
-                    if (func.isSpreaderFunctions) {
-                        return func;//its already async and also a spread function
-                    }
-                    return function async(data, data2, data3) {
-                        process.nextTick(func, data, data2, data3);
-                    };
-                }
-                return function () {
-                };
-            }
 
-            let success = asynchronize(ok);
-            let failure = asynchronize(fail);
-            let asyncResponseCaller = asynchronize(rawResponseCaller);
+            const postData = typeof opts.body !== 'undefined' ? JSON.stringify(opts.body) : null;
+            let requestOptions = calcRequestOpts(verb, endpoint, opts, postData);
 
-            let requestOptions = {
-                method: verb,
-                protocol: protocol,
-                port : port,
-                host: baseUrl,
-                path: path.join(baseEndpoint || '', endpoint).replace('/?', '?'),
-                timeout: timeout,
-                agent: typeof opts.agent === 'boolean' ? opts.agent : false
-            };
-
-
-            if (opts.headers) {
-                requestOptions.headers = extendHeaders(opts.headers, headers);
-            }
-            else {
-                requestOptions.headers = headers;
-            }
-
-            const postData = opts.body ? JSON.stringify(opts.body) : null;
-
-            if (postData) {
-                requestOptions.headers = extendHeaders(requestOptions.headers,
-                    {
-                        'Content-Type': 'application/json',
-                        'Content-Length': Buffer.byteLength(postData)
-                    });
-            }
-
-            let cacheKey = JSON.stringify(requestOptions);
+            let cacheKey = JSON.stringify(Object.assign({},requestOptions, { agent : 'cache' }));
 
             if(cacheTtl) {
                 let cacheValue = getCacheElement(cacheKey);
                 if (cacheValue) {
-                    let readIn = (!respondWithObject&&respondWithProperty)?cacheValue[respondWithProperty]:cacheValue;
                     return new Promise((resolve) => {
 
                         if (debug) {
                             log(verb, endpoint, new Date().getTime());
                         }
 
-                        success(readIn);
-                        resolve(readIn);
+                        resolve(cacheValue);
                     });
                 }
             }
@@ -254,8 +296,9 @@ module.exports = (function () {
             let responseData = [];
 
             const Transformer = new Transform({
-                highWaterMark: (opts && opts.highWaterMark) ? opts.highWaterMark : 16384 * 16,
+                highWaterMark: (opts && typeof opts.highWaterMark === 'number') ? opts.highWaterMark : 16384 * 16,
                 transform(chunk, encoding, callback) {
+
                     if(enablePipe) {
                         callback(null, chunk);
                     }
@@ -267,27 +310,13 @@ module.exports = (function () {
                 }
             });
 
+
             let resultant = new Promise((resolve, reject) => {
 
+                const req = (protocol.indexOf('https') === -1 ? http : https).request(requestOptions, function responder(response) {
 
-                let goodCB = success.isSpreaderFunctions ? success : spreader(resolve, success);
-                let badCB = failure.isSpreaderFunctions ? failure : spreader(reject, failure);
-
-                let responseCode;
-                let responseHeaders;
-
-                function responder(response) {
-
-                    responseCode = response.statusCode;
-
-                    responseHeaders = response.headers;
-
-                    let contentEncoding = response.headers['content-encoding'];
-                    if(typeof contentEncoding === 'string'){
-                        contentEncoding = contentEncoding.toLowerCase();
-                    }
-
-                    if (contentEncoding && ['gzip', 'deflate'].indexOf(contentEncoding) !== -1) {
+                    if ((typeof response.headers['content-encoding'] === 'string') &&
+                        ['gzip', 'deflate'].indexOf(response.headers['content-encoding'].toLowerCase()) !== -1) {
                         response.pipe(zlib.createUnzip()).pipe(Transformer);
                     }
                     else {
@@ -295,121 +324,53 @@ module.exports = (function () {
                     }
 
                     Transformer.on('finish', () => {
-                        let data = null;
-                        try {
-                            let stringedResponse = responseData.join('');
-                            let minData = '';
 
-                            if(stringedResponse){
-                                minData = parserFunction(stringedResponse);
-                            }
-                            else {
-                                if (debug) {
-                                    log('raw response data', responseData, response.statusCode, response.headers);
-                                }
-                                throw new Error('No Content');
-                            }
-
-                            if (respondWithObject) {
-                                data = {
-                                    code: response.statusCode,
-                                    request: requestOptions,
-                                    headers: response.headers,
-                                    cookies: getCookiesFromHeader(response.headers),
-                                    body: respondWithProperty ? minData[respondWithProperty] : minData,
-                                    retries: opts.retriesAttempted
-                                };
-                            }
-                            else {
-                                data = minData;
-                                // data = respondWithProperty?minData[respondWithProperty]:minData;
-                            }
-                        }
-                        catch (e) {
-
-                            if (debug) {
-                                log('raw response data', responseData);
-                            }
-
-                            if(retryOnFailure && opts.retriesAttempted < retryCount) {
-                                setTimeout(() => {
-                                    makeRequest(verb, endpoint, opts, goodCB, badCB);
-                                }, retryBackOff * opts.retriesAttempted);
-                                return;
-                            }
-                            else {
-                                return badCB(e)
-                            }
+                        let stringedResponse = responseData.join('');
+                        let data = 'No Content';
+                        if(stringedResponse){
+                            let minData = parserFunction(stringedResponse);
+                            let shouldReadIn = (!failedDueToBadCode(response.statusCode)&&respondWithProperty);
+                            let dOrP = shouldReadIn ? minData[respondWithProperty] : minData;
+                            data = respondWithObject?{
+                                code: response.statusCode,
+                                request: Object.assign({}, requestOptions, {agent : !!requestOptions.agent}),
+                                headers: response.headers,
+                                cookies: getCookiesFromHeader(response.headers),
+                                body: dOrP,
+                                retries: opts.retriesAttempted
+                            }:dOrP;
                         }
 
-                        asyncResponseCaller(response, data, responseHeaders);
+                        process.nextTick(auditor, response, data, response.headers);
 
-                        if (failWhenBadCode && responseCode >= 400) {
-                            opts.retriesAttempted++;
-
-                            if (retryOnFailure && (retryMaxCode >= responseCode) && (retryMinCode <= responseCode) && (opts.retriesAttempted < retryCount)) {
-
-                                setTimeout(() => {
-                                    makeRequest(verb, endpoint, opts, goodCB, badCB);
-                                }, retryBackOff * opts.retriesAttempted);
-                                return;
-
+                        if (failedDueToBadCode(response.statusCode)) {
+                            if(retryOnFail && (opts.retriesAttempted < retryCount)) {
+                                return retry(verb, endpoint, opts, opts.retriesAttempted++).then(resolve, reject);
                             }
-                            else {
-                                if (retryOnFailure && responseCode <= retryMaxCode && responseCode >= retryMinCode) {
-                                    retryFailure(data, responseHeaders);
-                                }
-                                badCB(data, responseHeaders, responseCode);
-                            }
+
+                            process.nextTick(retryFailureLogger, data, response.headers);
+
+                            return reject(data || new Error('unknown error'));
                         }
-                        else {
-                            if (cacheTtl) {
-                                addCacheElement(cacheKey, data);
-                            }
 
-                            if (debug) {
-                                log(verb, endpoint, new Date().getTime());
-                            }
-
-                            let r = (!respondWithObject&&respondWithProperty)?data[respondWithProperty]:data;
-
-                            goodCB(r, responseHeaders, r, responseCode);
-                        }
+                        resolve(addCacheElement(cacheKey, data));
                     });
 
                     Transformer.on('error', (err) => {
                         log('transform error', err);
-                        badCB(err);
+                        reject(err || new Error('unknown transform stream error'));
                     });
 
-                }
-
-                if (debug) {
-                    log(requestOptions);
-                }
-
-                const req = (protocol.indexOf('https') === -1 ? http : https).request(requestOptions, responder);
-
-                req.on('error', (err) => {
-
-                    if (debug) {
-                        log(verb, endpoint, new Date().getTime());
-                    }
-
-                    asyncResponseCaller(req);
-                    badCB(err);
                 });
 
-                req.on('timeout', () => {
+                let createError = function createError(name){
+                    return function (err) {
+                        reject(err || new Error(name));
+                    };
+                };
 
-                    if (debug) {
-                        log(verb, endpoint, new Date().getTime());
-                    }
-
-                    let error = new Error('timeout');
-                    asyncResponseCaller(error);
-                    badCB(error);
-                });
+                req.on('error', createError('error'));
+                req.on('timeout', createError('timeout'));
 
                 if (postData) {
                     req.write(postData);
@@ -417,22 +378,8 @@ module.exports = (function () {
                 req.end();
             });
 
-            if(enablePipe) {
-                Object.assign(resultant, Transformer);
-
-                //hack!
-                resultant.pipe = Transformer.pipe;
-                resultant.once = Transformer.once;
-                resultant.on = Transformer.on;
-                resultant.resume = Transformer.resume;
-                resultant.read = Transformer.read;
-                resultant.write = Transformer.write;
-                resultant._read = Transformer._read;
-                resultant._write = Transformer._write;
-                resultant.emit = Transformer.emit;
-                resultant.removeListener = Transformer.removeListener;
-                resultant.unpipe = Transformer.unpipe;
-                resultant.pause = Transformer.pause;
+            if(typeof enablePipe === 'boolean' && enablePipe) {
+                extendStream(resultant, Transformer);
             }
 
             return resultant;

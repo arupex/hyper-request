@@ -15,7 +15,7 @@ describe('SimpleRestClient Tests', function(){
 
     var assert = require('chai').assert;
 
-    it('get channels', function(done){
+    it('get currency latest', function(done){
 
         SimpleRestClient.get('/latest', {
         }, function(data){
@@ -27,8 +27,36 @@ describe('SimpleRestClient Tests', function(){
     });
 
 
+    it('get channelref through auth latest', function(done){
+        var config = require('../private.json');
+
+        var client = require('../hrequest')({
+            baseUrl : config.channelRef.baseUrl,
+            customLogger : function(){},
+            rawResponseCaller : function(a, b){
+
+            },
+            timeout : 4000,
+            debug : true,
+            respondWithProperty: false
+        });
+
+        client.get('/channels', {
+            headers : {
+                'X-Api-Key' : config.channelRef.apiKey
+            }
+        }, function(data){
+            console.log('data', data);
+            done();
+        }, function(err){
+            assert.fail(err);
+        });
+    });
+
+
+
     //http://stackoverflow.com/questions/9025095/how-can-i-test-uncaught-errors-in-mocha
-    it('get channels on failure dont call failure', function(done) {
+    it('get currency on failure dont call failure', function(done) {
 
         var error = new Error('error thrown inside success');
 
@@ -44,10 +72,7 @@ describe('SimpleRestClient Tests', function(){
 
         SimpleRestClient.get('/latest', {}, success, fail);
 
-        var originalException = process.listeners('uncaughtException').pop();
-        //Needed in node 0.10.5+
-        process.removeListener('uncaughtException', originalException);
-        process.once("uncaughtException", function (err) {
+        process.once("unhandledRejection", function (err) {
             if(err.message === 'error thrown inside success') {
                 done();
             }
@@ -56,7 +81,7 @@ describe('SimpleRestClient Tests', function(){
     });
 
 
-    it('promises', function(done) {
+    it('currency with promises', function(done) {
 
         SimpleRestClient.get('/latest', {}).then(function(data){
             console.log('data', data);
@@ -67,7 +92,7 @@ describe('SimpleRestClient Tests', function(){
     });
 
 
-    it('streams', function(done) {
+    it('currency streams', function(done) {
         var SimpleRestClient = require('../hrequest')({
             baseUrl : 'http://api.fixer.io/',
             customLogger : function(){},
