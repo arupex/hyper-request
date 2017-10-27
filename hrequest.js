@@ -56,14 +56,15 @@ module.exports = (function () {
      *                   cacheByReference : false // if true cache returns back the object returned in itself, does not return a copy, thus is mutable
      *               }
      */
-    return function HyperRequest(opts) {
+    return function HyperRequest(constructorOpts) {
+
 
         let cache = {};
         let cacheKeys = [];
-        let maxCacheKeys = typeof opts.maxCacheKeys === 'number' ? opts.maxCacheKeys : 100;
-        let cacheTtl = typeof opts.cacheTtl === 'number' ? opts.cacheTtl : 100;
+        let maxCacheKeys = typeof constructorOpts.maxCacheKeys === 'number' ? constructorOpts.maxCacheKeys : 100;
+        let cacheTtl = typeof constructorOpts.cacheTtl === 'number' ? constructorOpts.cacheTtl : 100;
 
-        let retryOnFail = !!opts.retryOnFailure;
+        let retryOnFail = !!constructorOpts.retryOnFailure;
         let retryFailureLogger = () => {};
         let retryMinCode = 400;
         let retryMaxCode = 600;
@@ -71,15 +72,15 @@ module.exports = (function () {
         let retryBackOff = 100;
 
         if (retryOnFail) {
-            retryFailureLogger = opts.retryOnFailure.fail || retryFailureLogger;
-            retryMinCode = opts.retryOnFailure.min || retryMinCode;
-            retryMaxCode = opts.retryOnFailure.max || retryMaxCode;
-            retryCount = opts.retryOnFailure.retries || retryCount;
-            retryBackOff = opts.retryOnFailure.backOff || retryBackOff;
+            retryFailureLogger = constructorOpts.retryOnFailure.fail || retryFailureLogger;
+            retryMinCode = constructorOpts.retryOnFailure.min || retryMinCode;
+            retryMaxCode = constructorOpts.retryOnFailure.max || retryMaxCode;
+            retryCount = constructorOpts.retryOnFailure.retries || retryCount;
+            retryBackOff = constructorOpts.retryOnFailure.backOff || retryBackOff;
         }
 
-        let enablePipe = opts.enablePipe;
-        let respondWithObject = opts.respondWithObject;
+        let enablePipe = constructorOpts.enablePipe;
+        let respondWithObject = constructorOpts.respondWithObject;
 
         function clone(data){
             return data?JSON.parse(JSON.stringify(data)):data;
@@ -105,36 +106,36 @@ module.exports = (function () {
 
         function getCacheElement(key) {
             let value = cache[key] ? cache[key].value : null;
-            if(!opts.cacheByReference){
+            if(!constructorOpts.cacheByReference){
                 value = clone(value);
             }
             return value;
         }
 
 
-        let url = URL.parse(opts.baseUrl);
+        let url = URL.parse(constructorOpts.baseUrl);
 
-        let log = typeof opts.customLogger === 'function'?opts.customLogger:defaultLogger;
-        let protocol = (opts.protocol ? opts.protocol : url.protocol) || 'http:';
+        let log = typeof constructorOpts.customLogger === 'function'?constructorOpts.customLogger:defaultLogger;
+        let protocol = (constructorOpts.protocol ? constructorOpts.protocol : url.protocol) || 'http:';
         let baseUrl = url.hostname;
         let baseEndpoint = url.path;
-        let port = opts.port || url.port || (protocol.indexOf('https')>-1?'443':'80');
+        let port = constructorOpts.port || url.port || (protocol.indexOf('https')>-1?'443':'80');
         let agent = (protocol==='http:')?new http.Agent({ keepAlive: true }):new https.Agent({ keepAlive: true });
-        let parserFunction = opts.parserFunction || JSON.parse;
+        let parserFunction = constructorOpts.parserFunction || JSON.parse;
 
-        let debug = typeof opts.debug === 'boolean' ? opts.debug : false;
+        let debug = typeof constructorOpts.debug === 'boolean' ? constructorOpts.debug : false;
 
-        let timeout = opts.timeout || 60000;
+        let timeout = constructorOpts.timeout || 60000;
 
-        let basicAuthToken = opts.basicAuthToken;
-        let basicAuthSecret = opts.basicAuthSecret;
-        let gzip = typeof opts.gzip !== 'boolean' ? true : opts.gzip;
-        let failWhenBadCode = typeof opts.failWhenBadCode !== 'boolean' ? true : opts.failWhenBadCode;
+        let basicAuthToken = constructorOpts.basicAuthToken;
+        let basicAuthSecret = constructorOpts.basicAuthSecret;
+        let gzip = typeof constructorOpts.gzip !== 'boolean' ? true : constructorOpts.gzip;
+        let failWhenBadCode = typeof constructorOpts.failWhenBadCode !== 'boolean' ? true : constructorOpts.failWhenBadCode;
 
-        let rawResponseCaller = typeof opts.rawResponseCaller !== 'function' ? function () {
-        } : opts.rawResponseCaller;
+        let rawResponseCaller = typeof constructorOpts.rawResponseCaller !== 'function' ? function () {
+        } : constructorOpts.rawResponseCaller;
 
-        let respondWithProperty = typeof opts.respondWithProperty !== 'boolean' ? (opts.respondWithProperty || 'data') : false;//set to false if you want everything!
+        let respondWithProperty = typeof constructorOpts.respondWithProperty !== 'boolean' ? (constructorOpts.respondWithProperty || 'data') : false;//set to false if you want everything!
 
         let headers = clone({
             'User-Agent': 'request',
@@ -195,7 +196,7 @@ module.exports = (function () {
                 options = {};
             }
 
-            let apromise = asyncPromise(makeRequest(verb, endpoint, opts));
+            let apromise = asyncPromise(makeRequest(verb, endpoint, options));
 
 
             if(typeof callback === 'function' && typeof failure === 'function') {
@@ -249,6 +250,9 @@ module.exports = (function () {
                     {
                         'Content-Length': Buffer.byteLength(postData)
                     });
+            }
+            if(debug) {
+                console.log('request opts', requestOptions);
             }
             return requestOptions;
         }
@@ -317,6 +321,7 @@ module.exports = (function () {
             const Transformer = new Transform({
                 highWaterMark: (opts && typeof opts.highWaterMark === 'number') ? opts.highWaterMark : 16384 * 16,
                 transform(chunk, encoding, callback) {
+
                     if(enablePipe) {
                         callback(null, chunk);
                     }
@@ -386,8 +391,8 @@ module.exports = (function () {
                 const req = (protocol.indexOf('https') === -1 ? http : https).request(requestOptions, responder);
 
                 let createError = function createError(name){
-                    return function () {
-                        reject(new Error(name));
+                    return function (err) {
+                        reject(err || new Error(name));
                     };
                 };
 

@@ -27,6 +27,34 @@ describe('SimpleRestClient Tests', function(){
     });
 
 
+    it('get channelref through auth latest', function(done){
+        var config = require('../private.json');
+
+        var client = require('../hrequest')({
+            baseUrl : config.channelRef.baseUrl,
+            customLogger : function(){},
+            rawResponseCaller : function(a, b){
+
+            },
+            timeout : 4000,
+            debug : true,
+            respondWithProperty: false
+        });
+
+        client.get('/channels', {
+            headers : {
+                'X-Api-Key' : config.channelRef.apiKey
+            }
+        }, function(data){
+            console.log('data', data);
+            done();
+        }, function(err){
+            assert.fail(err);
+        });
+    });
+
+
+
     //http://stackoverflow.com/questions/9025095/how-can-i-test-uncaught-errors-in-mocha
     it('get currency on failure dont call failure', function(done) {
 
