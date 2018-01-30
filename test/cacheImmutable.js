@@ -37,7 +37,7 @@ describe('SimpleRestClient Tests immutable cache', function() {
             }).then(data2 => {
                 SimpleRestClient.get('channels', {}).then( (res) => {
                     assert.isUndefined(res.fred);
-                    console.log('res', res);
+                    // console.log('res', res);
                     done();
                 }).catch((err) => {
                     done(err);

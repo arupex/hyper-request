@@ -1,22 +1,23 @@
 describe('SimpleRestClient Tests', function() {
 
     var assert = require('chai').assert;
+    const Request = require('../hrequest');
 
     it('get portquiz with port', function (done) {
 
         this.timeout(60000);
 
-        var SimpleRestClient = require('../hrequest')({
+        var SimpleRestClient = new Request({
             baseUrl: 'http://localhost:1337/',
             parserFunction : (data) => {
-                console.log('data', data);
+                // console.log('data', data);
                 return data;//cuz its html
             },
             respondWithProperty : false
         });
 
         SimpleRestClient.get('',{}).then(function (data) {
-            console.log('data', data);
+            // console.log('data', data);
 
             let bool = data.includes('Preload some data for performance');
 
@@ -33,7 +34,7 @@ describe('SimpleRestClient Tests', function() {
 
     it('https should default to port 443 if no port specified', function(done){
 
-        var SimpleRestClient = require('../hrequest')({
+        var SimpleRestClient = new Request({
             baseUrl: 'https://api.fixer.io/',
         });
 

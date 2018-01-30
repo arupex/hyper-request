@@ -3,7 +3,8 @@
  */
 describe('SimpleRestClient Tests', function(){
 
-    var SimpleRestClient = require('../hrequest')({
+    let Request = require('../hrequest');
+    var SimpleRestClient = new Request({
         baseUrl : 'http://api.fixer.io/',
         customLogger : function(){},
         rawResponseCaller : function(a, b){
@@ -19,7 +20,7 @@ describe('SimpleRestClient Tests', function(){
 
         SimpleRestClient.get('/latest', {
         }, function(data){
-            console.log('data', data);
+            // console.log('data', data);
             done();
         }, function(err){
             assert.fail(err);
@@ -30,7 +31,7 @@ describe('SimpleRestClient Tests', function(){
     it('get channelref through auth latest', function(done){
         var config = require('../private.json');
 
-        var client = require('../hrequest')({
+        var client = new Request({
             baseUrl : config.channelRef.baseUrl,
             customLogger : function(){},
             rawResponseCaller : function(a, b){
@@ -46,7 +47,7 @@ describe('SimpleRestClient Tests', function(){
                 'X-Api-Key' : config.channelRef.apiKey
             }
         }, function(data){
-            console.log('data', data);
+            // console.log('data', data);
             done();
         }, function(err){
             assert.fail(err);
@@ -84,7 +85,7 @@ describe('SimpleRestClient Tests', function(){
     it('currency with promises', function(done) {
 
         SimpleRestClient.get('/latest', {}).then(function(data){
-            console.log('data', data);
+            // console.log('data', data);
             done();
         }, function(err){
             assert.fail(err);
@@ -93,7 +94,7 @@ describe('SimpleRestClient Tests', function(){
 
 
     it('currency streams', function(done) {
-        var SimpleRestClient = require('../hrequest')({
+        var SimpleRestClient = new Request({
             baseUrl : 'http://api.fixer.io/',
             customLogger : function(){},
             rawResponseCaller : function(a, b){

@@ -4,7 +4,9 @@
 
 describe('SimpleRestClient Tests', function() {
 
-    let SimpleRestClient = require('../hrequest')({
+    const Request = require('../hrequest');
+
+    let SimpleRestClient = new Request({
         baseUrl : 'http://api.fixer.io/',
         respondWithProperty : 'rates'
     });
