@@ -1,6 +1,11 @@
 # hyper-request
     Simpler Http/s than build in node
 
+[![npm version](https://badge.fury.io/js/hyper-request.svg)](https://badge.fury.io/js/hyper-request)
+[![dependencies](https://david-dm.org/arupex/hyper-request.svg)](http://github.com/arupex/hyper-request)
+[![Donate](https://img.shields.io/badge/Donate-Arupex-green.svg)](https://pledgie.com/campaigns/31873)
+![lifetimeDownloadCount](https://img.shields.io/npm/dt/hyper-request.svg?maxAge=259200000)
+
 
 #Install
   
@@ -9,12 +14,15 @@
 
 #Usage
 
-    var SimpleRestClient = require('hyper-request')({
+    let HyperRequest = require('hyper-request')
+
+    var SimpleRestClient = new HyperRequest({
         baseUrl : 'http://api.fixer.io/latest',
         customLogger : function(){},
         rawResponseCaller : function(a, b){
 
         },
+        failWhenBadCode : true,//fails when >= a 400 code
         retryOnFailure:{
             fail : function(){},
             min : 300.
@@ -22,6 +30,7 @@
             retries : 5,
             backOff : 10 //ms
         },
+        gzip : true,
         respondWithObject : true, //returns headers and request as well
         respondWithProperty : 'data', //returns response property as top level, if set to false it returns full body
         parserFunction : function(data){ return JSON.parse(data) } // optional ( defaults to JSON.parse
@@ -31,12 +40,32 @@
         enablePipe : false,
         highWaterMark : 16000//set the high water mark on the transform stream
         cacheByReference : false // if true cache returns back the object returned in itself, does not return a copy, thus is mutable
+        authorization : ''//raw authorization header if applicable
     });
     
     SimpleRestClient.get('/endpoint', {
         headers : {},
         body : {}
     });
+    
+#### For In depth usage, I recommend looking at unit tests and the actual code (its not that scary), feel free to contribute!
+    
+#Methods - all http methods support a url and options object (url, { body : {}, headers : {}, etc... }) so you can include body/headers/etc
+####Http Methods
+    get
+    post
+    delete
+    put
+    patch   
+    
+####Util Methods
+    clearCache()
+    makeRequest(verb, endpoint, opts)
+    getCookiesFromHeader(headersObj)
+    getCacheElement(key)
+    addCacheElement(key, value)
+    clone(data) - deep clone (json.parse(json.stringify(data))
+    deepRead(obj, accessorString)
     
 #Callbacks
 
@@ -51,6 +80,19 @@
         function(){
         
         });
+        
+        
+#Bulk
+
+        SimpleRestClient.get(['?symbols=USD,GBP', '?symbols=GBP,USD'], {}).then(function(array){
+            
+        });
+        
+#Batch
+
+        SimpleRestClient.post([{},{},{},{},{}], { batch : true, batchSize : 2 }).then(function(array){
+            
+        });
 
 #Streams
 
@@ -59,7 +101,7 @@
         
 # Retry with Back Off
     
-        var client = require('hyper-request')({
+        var client = HyperRequest({
             baseUrl : 'http://api.fixer.io/thisdoesnotexist',
             customLogger : function(verb, endpoint, time){},
             rawResponseCaller : function(a, b){},

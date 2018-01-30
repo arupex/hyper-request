@@ -4,8 +4,9 @@
 
 describe('retry', () => {
 
+    const Request = require('../hrequest');
 
-    var SimpleRestClient = require('../hrequest')({
+    var SimpleRestClient = new Request({
         // protocol : 'http://',
         baseUrl : 'http://api.fixer.io/thisdoesnotexist',
         basicAuthToken : '',

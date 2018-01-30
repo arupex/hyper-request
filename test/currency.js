@@ -4,8 +4,9 @@
 
 describe('SimpleRestClient Tests', function() {
 
+    const Request = require('../hrequest');
 
-    var SimpleRestClient = require('../hrequest')({
+    var SimpleRestClient = new Request({
         // protocol : 'http://',
         baseUrl : 'http://api.fixer.io/latest',
         basicAuthToken : '',
@@ -29,7 +30,7 @@ describe('SimpleRestClient Tests', function() {
 
             SimpleRestClient.get('?symbols=USD,GBP', {
             }, function(data){
-                console.log('data', data);
+                // console.log('data', data);
                 done();
             }, function(err){
                 done(err);
