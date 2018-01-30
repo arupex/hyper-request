@@ -39,9 +39,8 @@ class HyperRequest {
      */
     constructor(config) {
 
+        this.clearCache();
 
-        this.cache = {};
-        this.cacheKeys = [];
         this.maxCacheKeys = typeof config.maxCacheKeys === 'number' ? config.maxCacheKeys : 100;
         this.cacheTtl = typeof config.cacheTtl === 'number' ? config.cacheTtl : 100;
 
@@ -82,6 +81,7 @@ class HyperRequest {
 
         this.basicAuthToken = config.basicAuthToken;
         this.basicAuthSecret = config.basicAuthSecret;
+        this.authorization = config.authorization;
         this.gzip = typeof config.gzip !== 'boolean' ? true : config.gzip;
         this.failWhenBadCode = typeof config.failWhenBadCode !== 'boolean' ? true : config.failWhenBadCode;
 
@@ -94,13 +94,13 @@ class HyperRequest {
 
         this.respondWithProperty = typeof config.respondWithProperty !== 'boolean' ? (config.respondWithProperty || 'data') : false;//set to false if you want everything!
 
-        this.headers = this.clone({
+        this.headers = Object.assign({}, this.clone({
             'User-Agent': 'request',
             'Content-Type': 'application/json',
             'Accept': 'application/json',
             'Accept-Encoding': this.gzip ? 'gzip, deflate' : undefined,
-            Authorization: this.basicAuthToken ? ('Basic ' + (new Buffer(this.basicAuthToken + ':' + (this.basicAuthSecret ? this.basicAuthSecret : ''), 'utf8')).toString('base64')) : undefined
-        });
+            Authorization: this.basicAuthToken ? ('Basic ' + (new Buffer(this.basicAuthToken + ':' + (this.basicAuthSecret ? this.basicAuthSecret : ''), 'utf8')).toString('base64')) : this.authorization?this.authorization:undefined
+        }), config.headers);
     }
 
     deepRead (obj, str) {
@@ -116,6 +116,11 @@ class HyperRequest {
             }
         }
         return obj;
+    }
+
+    clearCache () {
+        this.cache = {};
+        this.cacheKeys = [];
     }
 
     extendStream(resultant, Transformer) {
