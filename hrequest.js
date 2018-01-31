@@ -237,6 +237,17 @@ class HyperRequest {
         }
     }
 
+    /**
+     * handleBulkBatch
+     *  - bulk - meaning sending a bunch of requests possibly of different Urls but essentially at a batchSize of 1
+     *  - batch - meaning an array of entities being sent to the same-ish url but sent via batching (splitting into batches of batchSize)
+     * @param verb - [GET, POST, PUT, PATCH, DELETE, ETC]
+     * @param endpoint - {Array} or strings or Objects with url property
+     * @param options - opts all requests share
+     * @param callback - callback
+     * @param failure - failure callback if you want
+     * @returns {*} - promise if no callbacks
+     */
     handleBulkBatch(verb, endpoint, options, callback, failure) {
         if(options.batch){
             let batchSize = options.batchSize || 254;
@@ -257,22 +268,29 @@ class HyperRequest {
 
         let timing = options.bulkDelay || 50;
 
-        let resp = Promise.all(endpoint.map( (endp, i) => {
+        let doBackOffRequest = (endp, i) => {
             return new Promise((resolve, reject) => {
                 setTimeout(() => {
                     let url = '';
                     let opts = {};
-                    if(typeof endp === 'object' && typeof endp.url === 'string') {
+                    if (typeof endp === 'object' && typeof endp.url === 'string') {
                         url = endp.url;
                         opts = Object.assign({}, endp, options);
                     }
-                    else if(typeof endp === 'string') {
+                    else if (typeof endp === 'string') {
                         url = endp;
                         opts = Object.assign({}, options);
                     }
                     return this.handleCallbackOrPromise(verb, url, opts).then(resolve, reject);
-                }, timing*i);
-            });
+                }, timing * i);
+            }).then(data => data, err => Promise.resolve({
+                error: err,
+                request: endp
+            }));
+        };
+
+        let resp = Promise.all(endpoint.map( (endp, i) => {
+            return doBackOffRequest(endp, i);
         }));
 
         return this.promiseOrCallbacks(resp, options, callback, failure);
