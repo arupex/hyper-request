@@ -2,7 +2,7 @@ describe('SimpleRestClient Tests immutable cache', function() {
 
     let HyperRequest = require('../hrequest');
     var SimpleRestClient = new HyperRequest({
-        baseUrl: 'http://channels.eis-svcs.enernoc.net/api/v1/',
+        baseUrl: 'http://channels.test.net/api/v1/',
         cacheTtl : 1000000
     });
 
