@@ -429,7 +429,8 @@ class HyperRequest {
                             port: requestOptions.port,
                             host: requestOptions.baseUrl,
                             path: requestOptions.path,
-                            timeout: requestOptions.timeout
+                            timeout: requestOptions.timeout,
+                            postData : postData
                         },
                         response : {
                             statusCode : response.statusCode,
