@@ -423,7 +423,7 @@ class HyperRequest {
                         request: {
                             agent: !!requestOptions.agent,
                             cookies : this.getCookiesFromHeader(requestOptions.headers),
-
+                            baseUrl : this.baseUrl,
                             method: requestOptions.method,
                             protocol: requestOptions.protocol,
                             port: requestOptions.port,
