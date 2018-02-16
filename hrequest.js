@@ -85,7 +85,7 @@ class HyperRequest {
         this.gzip = typeof config.gzip !== 'boolean' ? true : config.gzip;
         this.failWhenBadCode = typeof config.failWhenBadCode !== 'boolean' ? true : config.failWhenBadCode;
 
-        this.rawResponseCaller = typeof config.rawResponseCaller !== 'function' ? function () {
+        this.rawResponseCaller = (typeof config.rawResponseCaller !== 'function') ? function () {
         } : config.rawResponseCaller;
 
         this.auditor =  (a, b, c) => {
@@ -374,9 +374,16 @@ class HyperRequest {
 
         let responseData = [];
 
+        const start = Date.now();
+        let timeStartResponse = null;
+        let timeEndResponse = null;
+
         const Transformer = new Transform({
             highWaterMark: (opts && typeof opts.highWaterMark === 'number') ? opts.highWaterMark : 16384 * 16,
             transform(chunk, enc, callback) {
+                if(!timeStartResponse) {
+                    timeStartResponse = Date.now();
+                }
                 if (this.enablePipe) {
                     callback(null, chunk);
                 }
@@ -389,8 +396,8 @@ class HyperRequest {
 
 
         let resultant = new Promise((resolve, reject) => {
-
             const req = (requestOptions.protocol.indexOf('https') === -1 ? http : https).request(requestOptions, (response) => {
+                const startOfRequestTime = Date.now();
 
                 if ((typeof response.headers['content-encoding'] === 'string') &&
                     ['gzip', 'deflate'].indexOf(response.headers['content-encoding'].toLowerCase()) !== -1) {
@@ -401,25 +408,54 @@ class HyperRequest {
                 }
 
                 Transformer.on('finish', () => {
+                    timeEndResponse = Date.now();
 
                     let stringedResponse = responseData.join('');
                     let data = 'No Content';
+                    let responseCookies = this.getCookiesFromHeader(response.headers);
+
+
+                    let startTimeDiff = startOfRequestTime - start;
+                    let responseTimeDiff = (timeStartResponse-startOfRequestTime);
+                    let extendedResponse = {
+                        statusCode : response.statusCode, // keep it compliant with other libraries
+                        code: response.statusCode,
+                        request: {
+                            agent: !!requestOptions.agent,
+                            cookies : this.getCookiesFromHeader(requestOptions.headers),
+
+                            method: requestOptions.method,
+                            protocol: requestOptions.protocol,
+                            port: requestOptions.port,
+                            host: requestOptions.baseUrl,
+                            path: requestOptions.path,
+                            timeout: requestOptions.timeout
+                        },
+                        response : {
+                            statusCode : response.statusCode,
+                            headers : response.headers,
+                            cookies : responseCookies,
+                            size : stringedResponse.length
+                        },
+                        timing : {
+                            start : startTimeDiff,
+                            response : responseTimeDiff,
+                            end :(timeEndResponse-timeStartResponse)
+                        },
+                        headers: response.headers,
+                        cookies: responseCookies,
+                        retries: opts.retriesAttempted
+                    };
+
                     if (stringedResponse) {
                         let minData = this.parserFunction(stringedResponse);
                         let shouldReadIn = (!this.failedDueToBadCode(response.statusCode) && this.respondWithProperty);
                         let dOrP = shouldReadIn ? this.deepRead(minData, this.respondWithProperty): minData;
-                        data = this.respondWithObject ? {
-                            statusCode : response.statusCode, // keep it compliant with other libraries
-                            code: response.statusCode,
-                            request: Object.assign({}, requestOptions, {agent: !!requestOptions.agent}),
-                            headers: response.headers,
-                            cookies: this.getCookiesFromHeader(response.headers),
-                            body: dOrP,
-                            retries: opts.retriesAttempted
-                        } : dOrP;
+                        extendedResponse.body = dOrP;
+                        data = this.respondWithObject ? extendedResponse : dOrP;
                     }
 
-                    process.nextTick(this.auditor, response, data, response.headers);
+                    this.auditor(extendedResponse, data, response.headers);
 
                     if (this.failedDueToBadCode(response.statusCode)) {
                         if (this.retryOnFail && (opts.retriesAttempted < this.retryCount)) {

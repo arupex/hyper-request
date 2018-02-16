@@ -11,12 +11,12 @@ describe('SimpleRestClient Tests', function() {
         baseUrl : 'http://api.fixer.io/latest',
         basicAuthToken : '',
         customLogger : function(verb, endpoint, time){
-            console.log(verb, endpoint, time);
+            // console.log(verb, endpoint, time);
         },
         rawResponseCaller : function(a, b){
 
         },
-        debug : true,
+        // debug : true,
         timeout : 4000,
         respondWithProperty : 'rates',
         respondWithObject : true
@@ -31,7 +31,7 @@ describe('SimpleRestClient Tests', function() {
 
             SimpleRestClient.get('?symbols=USD,GBP', {
             }, function(data2){
-                // console.log('data2', data2);
+                console.log('data2', data2);
                 done();
             }, function(err){
                 done(err);
