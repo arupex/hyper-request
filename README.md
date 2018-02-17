@@ -7,16 +7,16 @@
 ![lifetimeDownloadCount](https://img.shields.io/npm/dt/hyper-request.svg?maxAge=259200000)
 
 
-#Install
+# Install
   
     npm install hyper-request --save
 
 
-#Usage
+# Usage ( showing defaults, minus baseUrl )
 
-    let HyperRequest = require('hyper-request')
+    const HyperRequest = require('hyper-request')
 
-    var SimpleRestClient = new HyperRequest({
+    let SimpleRestClient = new HyperRequest({
         baseUrl : 'http://api.fixer.io/latest',
         customLogger : function(){},
         rawResponseCaller : function(a, b){
@@ -48,6 +48,16 @@
         body : {}
     });
     
+## Dont be intimidated you may only need baseUrl if you just want a json client
+     const SimpleRestClient = new HyperRequest({
+          baseUrl : 'http://api.fixer.io/latest',
+     });
+    
+     SimpleRestClient.get('/endpoint', {
+          headers : {},
+          body : {}
+     });
+    
 #### For In depth usage, I recommend looking at unit tests and the actual code (its not that scary), feel free to contribute!
     
 #Methods - all http methods support a url and options object (url, { body : {}, headers : {}, etc... }) so you can include body/headers/etc
@@ -58,7 +68,7 @@
     put
     patch   
     
-####Util Methods
+#### Util Methods
     clearCache()
     makeRequest(verb, endpoint, opts)
     getCookiesFromHeader(headersObj)
@@ -67,12 +77,12 @@
     clone(data) - deep clone (json.parse(json.stringify(data))
     deepRead(obj, accessorString)
     
-#Callbacks
+# Callbacks
 
         SimpleRestClient.get('?symbols=USD,GBP', {}, succesCallbacks, failCallback);
 
 
-#Promises
+# Promises
 
         SimpleRestClient.get('?symbols=USD,GBP', {}).then(function(){
             
@@ -82,26 +92,26 @@
         });
         
         
-#Bulk
+# Bulk
 
         SimpleRestClient.get(['?symbols=USD,GBP', '?symbols=GBP,USD'], {}).then(function(array){
             
         });
         
-#Batch
+# Batch
 
         SimpleRestClient.post([{},{},{},{},{}], { batch : true, batchSize : 2 }).then(function(array){
             
         });
 
-#Streams
+# Streams
 
         SimpleRestClient.get('?symbols=USD,GBP', {}).pipe(process.stdout;
         
         
 # Retry with Back Off
     
-        var client = HyperRequest({
+        let client = HyperRequest({
             baseUrl : 'http://api.fixer.io/thisdoesnotexist',
             customLogger : function(verb, endpoint, time){},
             rawResponseCaller : function(a, b){},
@@ -118,6 +128,14 @@
                 backOff :  100//backoff in ms * by retry count
             }
         });
+        
+# SubClient
+
+    let child = client.child({ url = '', headers = {}, audit}) 
+    
+    child.get('/thing')
+    
+    where audit is called on all requests and feeds back rawResponse
         
 This will retry 1 time beyond the initial try with a 100 ms backoff, on any errors between (inclusive) of 400 and 600 http response codes
 because this endpoint is a 404 it will retry twice, and fail hitting both the failure callback/reject/emit error, and will hit the global fail callback

@@ -25,3 +25,6 @@
     
     2.1.0 
         - SubClient, via child() method gives you a client that has overrides but shares the same cache / etc
+    
+    2.1.1
+        - Update documentation
