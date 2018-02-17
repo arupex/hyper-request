@@ -10,6 +10,43 @@ const URL = require('url');
 const defaultLogger = function (info) {
 };
 
+class SubClient {
+
+    constructor({ url = '', headers = {}, parentClient, audit }) {
+        this._url = url;
+        this._headers = headers;
+        this._parentClient = parentClient;
+        this._audit = audit;
+    }
+
+    opts(options){
+      return Object.assign({
+          audit : this._audit,
+          headers : this._headers
+      },options);
+    }
+
+    get(endpoint, options, callback, failure) {
+        return this._parentClient.get(path.join(this._url, endpoint), this.opts(options), callback, failure);
+    }
+
+    post(endpoint, options, callback, failure) {
+        return this._parentClient.post(path.join(this._url, endpoint), this.opts(options), callback, failure);
+    }
+
+    delete(endpoint, options, callback, failure) {
+        return this._parentClient.delete(path.join(this._url, endpoint), this.opts(options), callback, failure);
+    }
+
+    put(endpoint, options, callback, failure) {
+        return this._parentClient.put(path.join(this._url, endpoint), this.opts(options), callback, failure);
+    }
+
+    patch(endpoint, options, callback, failure) {
+        return this._parentClient.patch(path.join(this._url, endpoint), this.opts(options), callback, failure);
+    }
+}
+
 class HyperRequest {
 
     /**
@@ -456,7 +493,7 @@ class HyperRequest {
                         data = this.respondWithObject ? extendedResponse : dOrP;
                     }
 
-                    this.auditor(extendedResponse, data, response.headers);
+                    (opts.auditor === 'function'? opts.auditor:this.auditor)(extendedResponse, data, response.headers);//allow you to override the auditor function on request
 
                     if (this.failedDueToBadCode(response.statusCode)) {
                         if (this.retryOnFail && (opts.retriesAttempted < this.retryCount)) {
@@ -517,6 +554,15 @@ class HyperRequest {
 
     patch(endpoint, options, callback, failure) {
         return this.handleCallbackOrPromise('PATCH', endpoint, options, callback, failure);
+    }
+
+    child ({ url, headers, audit }) {
+        return new SubClient({
+            url,
+            headers,
+            audit,
+            parentClient : this
+        });
     }
 
 };
