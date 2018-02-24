@@ -12,11 +12,15 @@ const defaultLogger = function (info) {
 
 class SubClient {
 
-    constructor({ url = '', headers = {}, parentClient, audit }) {
-        this._url = url;
-        this._headers = headers;
-        this._parentClient = parentClient;
-        this._audit = audit;
+    constructor(config) {
+        if(!config.parentClient) {
+            throw new Error('needs parentClient');
+        }
+
+        this._url = config.url || '';
+        this._headers = config.headers || {};
+        this._parentClient = config.parentClient;
+        this._audit = config.audit;
     }
 
     opts(options){

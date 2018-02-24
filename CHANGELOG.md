@@ -28,3 +28,6 @@
     
     2.1.1
         - Update documentation
+        
+    2.1.3
+        - Make SubClient work on older versions of NodeJS
