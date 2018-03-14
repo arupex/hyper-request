@@ -31,3 +31,10 @@
         
     2.1.3
         - Make SubClient work on older versions of NodeJS
+    2.1.4
+        - Make SubClient work on older versions of NodeJS
+        
+    2.1.5
+        - Make constructor take
+            - keepAlive (boolean) - default to false
+            - agent (http(s) agent) - default to false

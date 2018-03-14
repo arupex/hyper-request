@@ -113,7 +113,21 @@ class HyperRequest {
         this.baseUrl = this.url.hostname;
         this.baseEndpoint = this.url.path;
         this.port = config.port || this.url.port || (this.protocol.indexOf('https') > -1 ? '443' : '80');
-        this.agent = (this.protocol === 'http:') ? new http.Agent({keepAlive: true}) : new https.Agent({keepAlive: true});
+
+        this.keepAlive = (typeof config.keepAlive === 'boolean') ? config.keepAlive : true;
+
+        let tmpAgent = (this.protocol === 'http:') ? new http.Agent({keepAlive: this.keepAlive}) : new https.Agent({keepAlive: this.keepAlive});
+
+        if(typeof config.agent !== 'undefined' && typeof config.agent !== 'boolean') {
+            this.agent = config.agent;
+        }
+        else if(typeof config.agent === 'boolean' && config.agent) {
+            this.agent = tmpAgent;
+        }
+        else {
+            this.agent = false;
+        }
+
         this.parserFunction = config.parserFunction || JSON.parse;
 
         this.debug = typeof config.debug === 'boolean' ? config.debug : false;
@@ -560,11 +574,14 @@ class HyperRequest {
         return this.handleCallbackOrPromise('PATCH', endpoint, options, callback, failure);
     }
 
-    child ({ url, headers, audit }) {
+    child (config) {
+        if(!config){
+            config = {};
+        }
         return new SubClient({
-            url,
-            headers,
-            audit,
+            url : config.url,
+            headers : config.headers,
+            audit : config.audit,
             parentClient : this
         });
     }
