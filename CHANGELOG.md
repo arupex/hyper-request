@@ -38,3 +38,6 @@
         - Make constructor take
             - keepAlive (boolean) - default to false
             - agent (http(s) agent) - default to false
+            
+    2.1.6
+        - Add headers to respondWithObject request
