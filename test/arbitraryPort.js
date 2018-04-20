@@ -1,11 +1,18 @@
 describe('SimpleRestClient Tests', function() {
 
+    process.on('uncaughtException', (e)=>{
+        console.log('e', e);
+    })
+    process.on('unhandledRejection', (e)=>{
+        console.log('e', e);
+    })
+
     var assert = require('chai').assert;
     const Request = require('../hrequest');
 
     it('get portquiz with port', function (done) {
 
-        this.timeout(60000);
+        this.timeout(6000);
 
         var SimpleRestClient = new Request({
             baseUrl: 'http://localhost:1337/',

@@ -41,6 +41,7 @@
         highWaterMark : 16000//set the high water mark on the transform stream
         cacheByReference : false // if true cache returns back the object returned in itself, does not return a copy, thus is mutable
         authorization : ''//raw authorization header if applicable
+        cacheIgnoreFields : ['headers.request_id']
     });
     
     SimpleRestClient.get('/endpoint', {

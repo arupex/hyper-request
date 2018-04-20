@@ -5,29 +5,32 @@ const https = require('https');
 const path = require('path');
 const zlib = require('zlib');
 const Transform = require('stream').Transform;
-
 const URL = require('url');
-const defaultLogger = function (info) {
-};
+
+const deepValue = require('deep-value');
+const deepSet = require('deep-setter');
+
+const defaultLogger = function (info) {};
 
 class SubClient {
 
     constructor(config) {
-        if(!config.parentClient) {
+        if (!config.parentClient) {
             throw new Error('needs parentClient');
         }
 
         this._url = config.url || '';
         this._headers = config.headers || {};
         this._parentClient = config.parentClient;
-        this._audit = config.audit;
+        this._auditor = config.auditor;
+        this._requestExtender = (typeof config.requestExtender === 'function') ? config.requestExtender : (r) => r;
     }
 
     opts(options){
-      return Object.assign({
-          audit : this._audit,
+      return this._requestExtender(Object.assign({}, {
+          auditor : this._auditor,
           headers : this._headers
-      },options);
+      }, options));
     }
 
     get(endpoint, options, callback, failure) {
@@ -57,9 +60,6 @@ class HyperRequest {
      * @param opts - {
      *                   baseUrl : 'http://api.fixer.io/latest',
      *                   customLogger : function(){},
-     *                   rawResponseCaller : function(a, b){
-     *
-     *                   },
      *                   retryOnFailure:{
      *                       fail : function(){},
      *                       min : 300.
@@ -86,8 +86,8 @@ class HyperRequest {
         this.cacheTtl = typeof config.cacheTtl === 'number' ? config.cacheTtl : 100;
 
         this.retryOnFail = !!config.retryOnFailure;
-        this.retryFailureLogger = () => {
-        };
+        this.retryFailureLogger = () => {};
+
         this.retryMinCode = 400;
         this.retryMaxCode = 600;
         this.retryCount = 5;
@@ -140,12 +140,11 @@ class HyperRequest {
         this.gzip = typeof config.gzip !== 'boolean' ? true : config.gzip;
         this.failWhenBadCode = typeof config.failWhenBadCode !== 'boolean' ? true : config.failWhenBadCode;
 
-        this.rawResponseCaller = (typeof config.rawResponseCaller !== 'function') ? function () {
-        } : config.rawResponseCaller;
-
         this.auditor =  (a, b, c) => {
-            process.nextTick(this.rawResponseCaller, a, b, c)
+            process.nextTick(config.auditor === 'function' ? config.auditor : () => {}, a, b, c)
         };
+
+        this.cacheIgnoreFields = Array.isArray(config.cacheIgnoreFields) ? config.cacheIgnoreFields : [];
 
         this.respondWithProperty = typeof config.respondWithProperty !== 'boolean' ? (config.respondWithProperty || 'data') : false;//set to false if you want everything!
 
@@ -156,21 +155,6 @@ class HyperRequest {
             'Accept-Encoding': this.gzip ? 'gzip, deflate' : undefined,
             Authorization: this.basicAuthToken ? ('Basic ' + (new Buffer(this.basicAuthToken + ':' + (this.basicAuthSecret ? this.basicAuthSecret : ''), 'utf8')).toString('base64')) : this.authorization?this.authorization:undefined
         }), config.headers);
-    }
-
-    deepRead (obj, str) {
-        if(typeof str === 'string') {
-            if(str.indexOf('.') !== -1){
-                let path = str.split('.');
-                let ref = obj;
-                while(path.length > 0 && !!ref && (ref = ref[path.shift()]) ) {}
-                return ref;
-            }
-            else {
-                return obj[str];
-            }
-        }
-        return obj;
     }
 
     clearCache () {
@@ -211,7 +195,7 @@ class HyperRequest {
 
             this.cache[key] = {
                 lastInvokeTimeout: setTimeout( () => {
-                    this.cacheKeys = this.cacheKeys.filter(testKey => testKey === key);
+                    this.cacheKeys = this.cacheKeys.filter(testKey => testKey !== key);
                     delete this.cache[key];
                 }, this.cacheTtl),
                 value: this.clone(value)
@@ -413,7 +397,13 @@ class HyperRequest {
         const postData = typeof opts.body !== 'undefined' ? JSON.stringify(opts.body) : null;
         let requestOptions = this.calcRequestOpts(verb, endpoint, opts, postData);
 
-        let cacheKey = JSON.stringify(Object.assign({}, requestOptions, {agent: 'cache'}));
+        let tmpCacheKey = Object.assign({}, requestOptions, {agent: 'cache'});
+
+        this.cacheIgnoreFields.forEach(complexKey => {
+            deepSet(tmpCacheKey, complexKey, undefined);
+        });
+
+        let cacheKey = JSON.stringify(tmpCacheKey);
 
         if (this.cacheTtl) {
             let cacheValue = this.getCacheElement(cacheKey);
@@ -504,13 +494,11 @@ class HyperRequest {
                         retries: opts.retriesAttempted
                     };
 
-                    if (stringedResponse) {
-                        let minData = this.parserFunction(stringedResponse);
-                        let shouldReadIn = (!this.failedDueToBadCode(response.statusCode) && this.respondWithProperty);
-                        let dOrP = shouldReadIn ? this.deepRead(minData, this.respondWithProperty): minData;
-                        extendedResponse.body = dOrP;
-                        data = this.respondWithObject ? extendedResponse : dOrP;
-                    }
+                    let minData = stringedResponse?this.parserFunction(stringedResponse):data;
+                    let shouldReadIn = (!this.failedDueToBadCode(response.statusCode) && this.respondWithProperty);
+                    let dOrP = shouldReadIn ? deepValue(minData, this.respondWithProperty): minData;
+                    extendedResponse.body = dOrP;
+                    data = this.respondWithObject ? extendedResponse : dOrP;
 
                     (opts.auditor === 'function'? opts.auditor:this.auditor)(extendedResponse, data, response.headers);//allow you to override the auditor function on request
 
@@ -575,6 +563,15 @@ class HyperRequest {
         return this.handleCallbackOrPromise('PATCH', endpoint, options, callback, failure);
     }
 
+    /**
+     *
+     * @param config
+     *  - url - extention to parents baseUrl
+     *  - headers - extension to parents headers
+     *  - auditor - override of parents auditor
+     *  - requestExtender - function which extends all requests
+     * @returns {SubClient}
+     */
     child (config) {
         if(!config){
             config = {};
@@ -582,7 +579,8 @@ class HyperRequest {
         return new SubClient({
             url : config.url,
             headers : config.headers,
-            audit : config.audit,
+            auditor : config.auditor,
+            requestExtender : config.requestExtender,
             parentClient : this
         });
     }
