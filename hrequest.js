@@ -500,7 +500,8 @@ class HyperRequest {
                     extendedResponse.body = dOrP;
                     data = this.respondWithObject ? extendedResponse : dOrP;
 
-                    (opts.auditor === 'function'? opts.auditor:this.auditor)(extendedResponse, data, response.headers);//allow you to override the auditor function on request
+                    let localAuditor = (typeof opts.auditor === 'function'? opts.auditor:this.auditor);
+                    localAuditor(extendedResponse, data, response.headers);//allow you to override the auditor function on request
 
                     if (this.failedDueToBadCode(response.statusCode)) {
                         if (this.retryOnFail && (opts.retriesAttempted < this.retryCount)) {

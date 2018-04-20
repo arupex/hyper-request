@@ -47,3 +47,6 @@
         - cache has cacheIgnoreFields option array so you can have it ignore fields on your request for cache keying
         - fixed a cache key issue
         - child has ability to have an extendRequest function which runs on every request before sent into parent
+        
+    3.0.1
+        - fix auditor override on each request if passed in opts
