@@ -141,7 +141,7 @@ class HyperRequest {
         this.failWhenBadCode = typeof config.failWhenBadCode !== 'boolean' ? true : config.failWhenBadCode;
 
         this.auditor =  (a, b, c) => {
-            process.nextTick(config.auditor === 'function' ? config.auditor : () => {}, a, b, c)
+            process.nextTick(typeof config.auditor === 'function' ? config.auditor : () => {}, a, b, c)
         };
 
         this.cacheIgnoreFields = Array.isArray(config.cacheIgnoreFields) ? config.cacheIgnoreFields : [];

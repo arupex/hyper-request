@@ -50,3 +50,5 @@
         
     3.0.1
         - fix auditor override on each request if passed in opts
+    3.0.2
+        - fixed missing typeof on parent auditor

@@ -1,6 +1,6 @@
 {
   "name": "hyper-request",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "description": "Make http Requests without all those sub-dependencies, just http/s with a api wrapper",
   "main": "hrequest.js",
   "scripts": {
