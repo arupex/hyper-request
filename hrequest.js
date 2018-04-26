@@ -397,7 +397,7 @@ class HyperRequest {
         const postData = typeof opts.body !== 'undefined' ? JSON.stringify(opts.body) : null;
         let requestOptions = this.calcRequestOpts(verb, endpoint, opts, postData);
 
-        let tmpCacheKey = Object.assign({}, requestOptions, {agent: 'cache'});
+        let tmpCacheKey = JSON.parse(JSON.stringify(Object.assign({}, requestOptions, {agent: 'cache'})));
 
         this.cacheIgnoreFields.forEach(complexKey => {
             deepSet(tmpCacheKey, complexKey, undefined);
