@@ -99,6 +99,11 @@ class HyperRequest {
             this.retryMaxCode = config.retryOnFailure.max || this.retryMaxCode;
             this.retryCount = config.retryOnFailure.retries || this.retryCount;
             this.retryBackOff = config.retryOnFailure.backOff || this.retryBackOff;
+
+            this.retryExtension = typeof config.retryOnFailure.retryExtension === 'function' ? config.retryOnFailure.retryExtension : () => { return Promise.resolve({
+                persist : false,
+                extensions : []
+            }) };
         }
 
         this.enablePipe = config.enablePipe;
@@ -127,6 +132,10 @@ class HyperRequest {
         else {
             this.agent = false;
         }
+
+        this.__extenderArray = [];
+
+
 
         this.parserFunction = config.parserFunction || JSON.parse;
 
@@ -348,7 +357,7 @@ class HyperRequest {
         };
 
 
-        if (typeof opts.headers === 'object') {
+        if (opts.headers && typeof opts.headers === 'object') {
             requestOptions.headers = Object.assign({}, this.headers, opts.headers);
         }
         else {
@@ -380,11 +389,32 @@ class HyperRequest {
         return (this.failWhenBadCode && statusCode >= 400) && (this.retryMaxCode >= statusCode) && (this.retryMinCode <= statusCode);
     }
 
+    setExtenders (array) {
+        this.__extenderArray = Array.isArray(array)?array:this.__extenderArray;
+    }
+
+    getExtenders () {
+        return this.__extenderArray;
+    }
+
+    extendByExtenders(opts, extenders) {
+        (extenders||[]).forEach((extender) => {
+            if(extender && typeof extender === 'object') {
+                if(typeof extender.accessor === 'string' && typeof extender.value !== 'undefined') {
+                    deepSet(opts, extender.accessor, extender.value);
+                }
+            }
+        });
+        return opts;
+    }
+
     makeRequest(verb, endpoint, opts) {
 
-        if (typeof opts !== 'object') {
+        if (!opts || typeof opts !== 'object') {
             opts = {};
         }
+
+        opts = this.extendByExtenders(opts, this.__extenderArray);
 
         if (this.retryOnFail && typeof opts.retriesAttempted !== 'number') {
             opts.retriesAttempted = 0;
@@ -505,7 +535,19 @@ class HyperRequest {
 
                     if (this.failedDueToBadCode(response.statusCode)) {
                         if (this.retryOnFail && (opts.retriesAttempted < this.retryCount)) {
-                            return this.retry(verb, endpoint, opts, opts.retriesAttempted++).then(resolve, reject);
+                            return this.retryExtension(extendedResponse).then((extenders) => {
+
+                                let isXtended = extenders && typeof extenders === 'object' && Array.isArray(extenders.extensions);
+
+                                if(isXtended && extenders.persist) {
+                                    this.setExtenders(extenders.extensions);
+                                }
+                                let eOpts = this.extendByExtenders(opts, isXtended?extenders.extensions:null);
+                                return this.retry(verb, endpoint, eOpts, opts.retriesAttempted++).then(resolve, reject);
+
+                            }, (err) => {
+                                return reject(err || new Error('unknown error'));
+                            });
                         }
 
                         process.nextTick(this.retryFailureLogger, data, response.headers);

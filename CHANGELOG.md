@@ -52,3 +52,6 @@
         - fix auditor override on each request if passed in opts
     3.0.2
         - fixed missing typeof on parent auditor
+        
+    3.1.3
+        - added retryExtension function to retryOnFailure block
