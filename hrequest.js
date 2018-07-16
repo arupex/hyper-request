@@ -164,6 +164,9 @@ class HyperRequest {
             'Accept-Encoding': this.gzip ? 'gzip, deflate' : undefined,
             Authorization: this.basicAuthToken ? ('Basic ' + (new Buffer(this.basicAuthToken + ':' + (this.basicAuthSecret ? this.basicAuthSecret : ''), 'utf8')).toString('base64')) : this.authorization?this.authorization:undefined
         }), config.headers);
+
+
+        this._fireAndForget = typeof config.fireAndForget === 'boolean'?config.fireAndForget:false;
     }
 
     clearCache () {
@@ -474,6 +477,10 @@ class HyperRequest {
             const req = (requestOptions.protocol.indexOf('https') === -1 ? http : https).request(requestOptions, (response) => {
                 const startOfRequestTime = Date.now();
 
+                if(this._fireAndForget) {
+                    return resolve();
+                }
+
                 if ((typeof response.headers['content-encoding'] === 'string') &&
                     ['gzip', 'deflate'].indexOf(response.headers['content-encoding'].toLowerCase()) !== -1) {
                     response.pipe(zlib.createUnzip()).pipe(Transformer);
@@ -565,21 +572,24 @@ class HyperRequest {
 
             });
 
-            req.on('error', function (err) {
-                reject(err || new Error('error'));
-            });
+            if(!this._fireAndForget) {
+                req.on('error', function (err) {
+                    reject(err || new Error('error'));
+                });
 
-            req.on('timeout', function (err) {
-                reject(err || new Error('timeout'));
-            });
+                req.on('timeout', function (err) {
+                    reject(err || new Error('timeout'));
+                });
+            }
 
             if (postData) {
                 req.write(postData);
             }
             req.end();
+
         });
 
-        if (typeof this.enablePipe === 'boolean' && this.enablePipe) {
+        if (!this._fireAndForget && typeof this.enablePipe === 'boolean' && this.enablePipe) {
             this.extendStream(resultant, Transformer);
         }
 

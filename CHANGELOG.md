@@ -55,3 +55,6 @@
         
     3.1.3
         - added retryExtension function to retryOnFailure block
+        
+    3.2.0
+        - added fireAndForget for fire and forget
