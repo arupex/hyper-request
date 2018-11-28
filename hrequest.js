@@ -7,6 +7,8 @@ const zlib = require('zlib');
 const Transform = require('stream').Transform;
 const URL = require('url');
 
+const MeterFactory = require('./lib/MeterFactory');
+
 const deepValue = require('deep-value');
 const deepSet = require('deep-setter');
 
@@ -374,7 +376,7 @@ class HyperRequest {
                 });
         }
         if (this.debug) {
-            console.log('request opts', requestOptions);
+            this.log('request opts', requestOptions);
         }
         return requestOptions;
     }
@@ -413,6 +415,10 @@ class HyperRequest {
 
     makeRequest(verb, endpoint, opts) {
 
+        let meters = new MeterFactory();
+
+        let preparationMeter = meters.meter('preparation_meter');
+
         if (!opts || typeof opts !== 'object') {
             opts = {};
         }
@@ -450,11 +456,15 @@ class HyperRequest {
             }
         }
 
+        preparationMeter.end();
+
         let responseData = [];
 
         const start = Date.now();
         let timeStartResponse = null;
         let timeEndResponse = null;
+
+        let firstChunk = meters.meter('first_chunk');
 
         const Transformer = new Transform({
             highWaterMark: (opts && typeof opts.highWaterMark === 'number') ? opts.highWaterMark : 16384 * 16,
@@ -462,6 +472,9 @@ class HyperRequest {
                 if(!timeStartResponse) {
                     timeStartResponse = Date.now();
                 }
+
+                firstChunk.end();
+
                 if (this.enablePipe) {
                     callback(null, chunk);
                 }
@@ -474,8 +487,16 @@ class HyperRequest {
 
 
         let resultant = new Promise((resolve, reject) => {
+            let socketOpening = meters.meter('socket_opening');
             const req = (requestOptions.protocol.indexOf('https') === -1 ? http : https).request(requestOptions, (response) => {
+                socketOpening.end();
                 const startOfRequestTime = Date.now();
+
+                let requestFinished = meters.meter('response');
+
+                if (this.debug) {
+                    this.log(`request ${requestOptions.path} started @ ${startOfRequestTime}`);
+                }
 
                 if(this._fireAndForget) {
                     return resolve();
@@ -490,7 +511,16 @@ class HyperRequest {
                 }
 
                 Transformer.on('finish', () => {
+
                     timeEndResponse = Date.now();
+
+                    requestFinished.end();
+
+                    let postProcess = meters.meter('post_process');
+
+                    if (this.debug) {
+                        this.log(`request ${requestOptions.path} finished @ ${timeEndResponse}`);
+                    }
 
                     let stringedResponse = responseData.join('');
                     let data = 'No Content';
@@ -499,6 +529,9 @@ class HyperRequest {
 
                     let startTimeDiff = startOfRequestTime - start;
                     let responseTimeDiff = (timeStartResponse-startOfRequestTime);
+
+                    postProcess.end();
+
                     let extendedResponse = {
                         statusCode : response.statusCode, // keep it compliant with other libraries
                         code: response.statusCode,
@@ -526,6 +559,7 @@ class HyperRequest {
                             response : responseTimeDiff,
                             end :(timeEndResponse-timeStartResponse)
                         },
+                        metrics : meters.getMeters(),
                         headers: response.headers,
                         cookies: responseCookies,
                         retries: opts.retriesAttempted
@@ -566,6 +600,21 @@ class HyperRequest {
                 });
 
                 Transformer.on('error', (err) => {
+
+                    if (this.debug) {
+                        this.log(`request ${requestOptions.path} errored @ ${Date.now()}`);
+                    }
+
+                    this.log('transform error', err);
+                    reject(err || new Error('unknown transform stream error'));
+                });
+
+                Transformer.on('timeout', (err) => {
+
+                    if (this.debug) {
+                        this.log(`request ${requestOptions.path} timedout @ ${Date.now()}`);
+                    }
+
                     this.log('transform error', err);
                     reject(err || new Error('unknown transform stream error'));
                 });

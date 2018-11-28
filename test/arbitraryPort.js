@@ -1,10 +1,10 @@
 describe('SimpleRestClient Tests', function() {
 
     process.on('uncaughtException', (e)=>{
-        console.log('e', e);
+        console.log('e', JSON.stringify(e, null, 3));
     })
     process.on('unhandledRejection', (e)=>{
-        console.log('e', e);
+        console.log('e', JSON.stringify(e, null, 3));
     })
 
     var assert = require('chai').assert;
