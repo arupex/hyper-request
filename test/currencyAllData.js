@@ -31,9 +31,12 @@ describe('SimpleRestClient Tests', function() {
 
             SimpleRestClient.get('?symbols=USD,GBP', {
             }, function(data2){
-                console.log('data2', data2);
+                console.log('data2', JSON.stringify(data2, null, 3));
                 done();
             }, function(err){
+
+                console.log('err', JSON.stringify(err, null, 3));
+
                 done(err);
                 assert.fail(err);
             });

@@ -5,29 +5,34 @@ const https = require('https');
 const path = require('path');
 const zlib = require('zlib');
 const Transform = require('stream').Transform;
-
 const URL = require('url');
-const defaultLogger = function (info) {
-};
+
+const MeterFactory = require('./lib/MeterFactory');
+
+const deepValue = require('deep-value');
+const deepSet = require('deep-setter');
+
+const defaultLogger = function (info) {};
 
 class SubClient {
 
     constructor(config) {
-        if(!config.parentClient) {
+        if (!config.parentClient) {
             throw new Error('needs parentClient');
         }
 
         this._url = config.url || '';
         this._headers = config.headers || {};
         this._parentClient = config.parentClient;
-        this._audit = config.audit;
+        this._auditor = config.auditor;
+        this._requestExtender = (typeof config.requestExtender === 'function') ? config.requestExtender : (r) => r;
     }
 
     opts(options){
-      return Object.assign({
-          audit : this._audit,
+      return this._requestExtender(Object.assign({}, {
+          auditor : this._auditor,
           headers : this._headers
-      },options);
+      }, options));
     }
 
     get(endpoint, options, callback, failure) {
@@ -57,9 +62,6 @@ class HyperRequest {
      * @param opts - {
      *                   baseUrl : 'http://api.fixer.io/latest',
      *                   customLogger : function(){},
-     *                   rawResponseCaller : function(a, b){
-     *
-     *                   },
      *                   retryOnFailure:{
      *                       fail : function(){},
      *                       min : 300.
@@ -86,8 +88,8 @@ class HyperRequest {
         this.cacheTtl = typeof config.cacheTtl === 'number' ? config.cacheTtl : 100;
 
         this.retryOnFail = !!config.retryOnFailure;
-        this.retryFailureLogger = () => {
-        };
+        this.retryFailureLogger = () => {};
+
         this.retryMinCode = 400;
         this.retryMaxCode = 600;
         this.retryCount = 5;
@@ -99,6 +101,11 @@ class HyperRequest {
             this.retryMaxCode = config.retryOnFailure.max || this.retryMaxCode;
             this.retryCount = config.retryOnFailure.retries || this.retryCount;
             this.retryBackOff = config.retryOnFailure.backOff || this.retryBackOff;
+
+            this.retryExtension = typeof config.retryOnFailure.retryExtension === 'function' ? config.retryOnFailure.retryExtension : () => { return Promise.resolve({
+                persist : false,
+                extensions : []
+            }) };
         }
 
         this.enablePipe = config.enablePipe;
@@ -128,6 +135,10 @@ class HyperRequest {
             this.agent = false;
         }
 
+        this.__extenderArray = [];
+
+
+
         this.parserFunction = config.parserFunction || JSON.parse;
 
         this.debug = typeof config.debug === 'boolean' ? config.debug : false;
@@ -140,12 +151,11 @@ class HyperRequest {
         this.gzip = typeof config.gzip !== 'boolean' ? true : config.gzip;
         this.failWhenBadCode = typeof config.failWhenBadCode !== 'boolean' ? true : config.failWhenBadCode;
 
-        this.rawResponseCaller = (typeof config.rawResponseCaller !== 'function') ? function () {
-        } : config.rawResponseCaller;
-
         this.auditor =  (a, b, c) => {
-            process.nextTick(this.rawResponseCaller, a, b, c)
+            process.nextTick(typeof config.auditor === 'function' ? config.auditor : () => {}, a, b, c)
         };
+
+        this.cacheIgnoreFields = Array.isArray(config.cacheIgnoreFields) ? config.cacheIgnoreFields : [];
 
         this.respondWithProperty = typeof config.respondWithProperty !== 'boolean' ? (config.respondWithProperty || 'data') : false;//set to false if you want everything!
 
@@ -156,21 +166,9 @@ class HyperRequest {
             'Accept-Encoding': this.gzip ? 'gzip, deflate' : undefined,
             Authorization: this.basicAuthToken ? ('Basic ' + (new Buffer(this.basicAuthToken + ':' + (this.basicAuthSecret ? this.basicAuthSecret : ''), 'utf8')).toString('base64')) : this.authorization?this.authorization:undefined
         }), config.headers);
-    }
 
-    deepRead (obj, str) {
-        if(typeof str === 'string') {
-            if(str.indexOf('.') !== -1){
-                let path = str.split('.');
-                let ref = obj;
-                while(path.length > 0 && !!ref && (ref = ref[path.shift()]) ) {}
-                return ref;
-            }
-            else {
-                return obj[str];
-            }
-        }
-        return obj;
+
+        this._fireAndForget = typeof config.fireAndForget === 'boolean'?config.fireAndForget:false;
     }
 
     clearCache () {
@@ -211,7 +209,7 @@ class HyperRequest {
 
             this.cache[key] = {
                 lastInvokeTimeout: setTimeout( () => {
-                    this.cacheKeys = this.cacheKeys.filter(testKey => testKey === key);
+                    this.cacheKeys = this.cacheKeys.filter(testKey => testKey !== key);
                     delete this.cache[key];
                 }, this.cacheTtl),
                 value: this.clone(value)
@@ -364,7 +362,7 @@ class HyperRequest {
         };
 
 
-        if (typeof opts.headers === 'object') {
+        if (opts.headers && typeof opts.headers === 'object') {
             requestOptions.headers = Object.assign({}, this.headers, opts.headers);
         }
         else {
@@ -378,7 +376,7 @@ class HyperRequest {
                 });
         }
         if (this.debug) {
-            console.log('request opts', requestOptions);
+            this.log('request opts', requestOptions);
         }
         return requestOptions;
     }
@@ -396,11 +394,36 @@ class HyperRequest {
         return (this.failWhenBadCode && statusCode >= 400) && (this.retryMaxCode >= statusCode) && (this.retryMinCode <= statusCode);
     }
 
+    setExtenders (array) {
+        this.__extenderArray = Array.isArray(array)?array:this.__extenderArray;
+    }
+
+    getExtenders () {
+        return this.__extenderArray;
+    }
+
+    extendByExtenders(opts, extenders) {
+        (extenders||[]).forEach((extender) => {
+            if(extender && typeof extender === 'object') {
+                if(typeof extender.accessor === 'string' && typeof extender.value !== 'undefined') {
+                    deepSet(opts, extender.accessor, extender.value);
+                }
+            }
+        });
+        return opts;
+    }
+
     makeRequest(verb, endpoint, opts) {
 
-        if (typeof opts !== 'object') {
+        let meters = new MeterFactory();
+
+        let preparationMeter = meters.meter('preparation_meter');
+
+        if (!opts || typeof opts !== 'object') {
             opts = {};
         }
+
+        opts = this.extendByExtenders(opts, this.__extenderArray);
 
         if (this.retryOnFail && typeof opts.retriesAttempted !== 'number') {
             opts.retriesAttempted = 0;
@@ -413,7 +436,13 @@ class HyperRequest {
         const postData = typeof opts.body !== 'undefined' ? JSON.stringify(opts.body) : null;
         let requestOptions = this.calcRequestOpts(verb, endpoint, opts, postData);
 
-        let cacheKey = JSON.stringify(Object.assign({}, requestOptions, {agent: 'cache'}));
+        let tmpCacheKey = JSON.parse(JSON.stringify(Object.assign({}, requestOptions, {agent: 'cache'})));
+
+        this.cacheIgnoreFields.forEach(complexKey => {
+            deepSet(tmpCacheKey, complexKey, undefined);
+        });
+
+        let cacheKey = JSON.stringify(tmpCacheKey);
 
         if (this.cacheTtl) {
             let cacheValue = this.getCacheElement(cacheKey);
@@ -427,11 +456,15 @@ class HyperRequest {
             }
         }
 
+        preparationMeter.end();
+
         let responseData = [];
 
         const start = Date.now();
         let timeStartResponse = null;
         let timeEndResponse = null;
+
+        let firstChunk = meters.meter('first_chunk');
 
         const Transformer = new Transform({
             highWaterMark: (opts && typeof opts.highWaterMark === 'number') ? opts.highWaterMark : 16384 * 16,
@@ -439,6 +472,9 @@ class HyperRequest {
                 if(!timeStartResponse) {
                     timeStartResponse = Date.now();
                 }
+
+                firstChunk.end();
+
                 if (this.enablePipe) {
                     callback(null, chunk);
                 }
@@ -451,8 +487,20 @@ class HyperRequest {
 
 
         let resultant = new Promise((resolve, reject) => {
+            let socketOpening = meters.meter('socket_opening');
             const req = (requestOptions.protocol.indexOf('https') === -1 ? http : https).request(requestOptions, (response) => {
+                socketOpening.end();
                 const startOfRequestTime = Date.now();
+
+                let requestFinished = meters.meter('response');
+
+                if (this.debug) {
+                    this.log(`request ${requestOptions.path} started @ ${startOfRequestTime}`);
+                }
+
+                if(this._fireAndForget) {
+                    return resolve();
+                }
 
                 if ((typeof response.headers['content-encoding'] === 'string') &&
                     ['gzip', 'deflate'].indexOf(response.headers['content-encoding'].toLowerCase()) !== -1) {
@@ -463,7 +511,16 @@ class HyperRequest {
                 }
 
                 Transformer.on('finish', () => {
+
                     timeEndResponse = Date.now();
+
+                    requestFinished.end();
+
+                    let postProcess = meters.meter('post_process');
+
+                    if (this.debug) {
+                        this.log(`request ${requestOptions.path} finished @ ${timeEndResponse}`);
+                    }
 
                     let stringedResponse = responseData.join('');
                     let data = 'No Content';
@@ -472,6 +529,9 @@ class HyperRequest {
 
                     let startTimeDiff = startOfRequestTime - start;
                     let responseTimeDiff = (timeStartResponse-startOfRequestTime);
+
+                    postProcess.end();
+
                     let extendedResponse = {
                         statusCode : response.statusCode, // keep it compliant with other libraries
                         code: response.statusCode,
@@ -499,24 +559,36 @@ class HyperRequest {
                             response : responseTimeDiff,
                             end :(timeEndResponse-timeStartResponse)
                         },
+                        metrics : meters.getMeters(),
                         headers: response.headers,
                         cookies: responseCookies,
                         retries: opts.retriesAttempted
                     };
 
-                    if (stringedResponse) {
-                        let minData = this.parserFunction(stringedResponse);
-                        let shouldReadIn = (!this.failedDueToBadCode(response.statusCode) && this.respondWithProperty);
-                        let dOrP = shouldReadIn ? this.deepRead(minData, this.respondWithProperty): minData;
-                        extendedResponse.body = dOrP;
-                        data = this.respondWithObject ? extendedResponse : dOrP;
-                    }
+                    let minData = stringedResponse?this.parserFunction(stringedResponse):data;
+                    let shouldReadIn = (!this.failedDueToBadCode(response.statusCode) && this.respondWithProperty);
+                    let dOrP = shouldReadIn ? deepValue(minData, this.respondWithProperty): minData;
+                    extendedResponse.body = dOrP;
+                    data = this.respondWithObject ? extendedResponse : dOrP;
 
-                    (opts.auditor === 'function'? opts.auditor:this.auditor)(extendedResponse, data, response.headers);//allow you to override the auditor function on request
+                    let localAuditor = (typeof opts.auditor === 'function'? opts.auditor:this.auditor);
+                    localAuditor(extendedResponse, data, response.headers);//allow you to override the auditor function on request
 
                     if (this.failedDueToBadCode(response.statusCode)) {
                         if (this.retryOnFail && (opts.retriesAttempted < this.retryCount)) {
-                            return this.retry(verb, endpoint, opts, opts.retriesAttempted++).then(resolve, reject);
+                            return this.retryExtension(extendedResponse).then((extenders) => {
+
+                                let isXtended = extenders && typeof extenders === 'object' && Array.isArray(extenders.extensions);
+
+                                if(isXtended && extenders.persist) {
+                                    this.setExtenders(extenders.extensions);
+                                }
+                                let eOpts = this.extendByExtenders(opts, isXtended?extenders.extensions:null);
+                                return this.retry(verb, endpoint, eOpts, opts.retriesAttempted++).then(resolve, reject);
+
+                            }, (err) => {
+                                return reject(err || new Error('unknown error'));
+                            });
                         }
 
                         process.nextTick(this.retryFailureLogger, data, response.headers);
@@ -528,27 +600,45 @@ class HyperRequest {
                 });
 
                 Transformer.on('error', (err) => {
+
+                    if (this.debug) {
+                        this.log(`request ${requestOptions.path} errored @ ${Date.now()}`);
+                    }
+
+                    this.log('transform error', err);
+                    reject(err || new Error('unknown transform stream error'));
+                });
+
+                Transformer.on('timeout', (err) => {
+
+                    if (this.debug) {
+                        this.log(`request ${requestOptions.path} timedout @ ${Date.now()}`);
+                    }
+
                     this.log('transform error', err);
                     reject(err || new Error('unknown transform stream error'));
                 });
 
             });
 
-            req.on('error', function (err) {
-                reject(err || new Error('error'));
-            });
+            if(!this._fireAndForget) {
+                req.on('error', function (err) {
+                    reject(err || new Error('error'));
+                });
 
-            req.on('timeout', function (err) {
-                reject(err || new Error('timeout'));
-            });
+                req.on('timeout', function (err) {
+                    reject(err || new Error('timeout'));
+                });
+            }
 
             if (postData) {
                 req.write(postData);
             }
             req.end();
+
         });
 
-        if (typeof this.enablePipe === 'boolean' && this.enablePipe) {
+        if (!this._fireAndForget && typeof this.enablePipe === 'boolean' && this.enablePipe) {
             this.extendStream(resultant, Transformer);
         }
 
@@ -575,6 +665,15 @@ class HyperRequest {
         return this.handleCallbackOrPromise('PATCH', endpoint, options, callback, failure);
     }
 
+    /**
+     *
+     * @param config
+     *  - url - extention to parents baseUrl
+     *  - headers - extension to parents headers
+     *  - auditor - override of parents auditor
+     *  - requestExtender - function which extends all requests
+     * @returns {SubClient}
+     */
     child (config) {
         if(!config){
             config = {};
@@ -582,7 +681,8 @@ class HyperRequest {
         return new SubClient({
             url : config.url,
             headers : config.headers,
-            audit : config.audit,
+            auditor : config.auditor,
+            requestExtender : config.requestExtender,
             parentClient : this
         });
     }

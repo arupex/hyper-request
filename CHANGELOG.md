@@ -41,3 +41,20 @@
             
     2.1.6
         - Add headers to respondWithObject request
+
+    3.0.0
+        - auditor is first class citizen instead of rawResponseCaller which no longer exists
+        - cache has cacheIgnoreFields option array so you can have it ignore fields on your request for cache keying
+        - fixed a cache key issue
+        - child has ability to have an extendRequest function which runs on every request before sent into parent
+        
+    3.0.1
+        - fix auditor override on each request if passed in opts
+    3.0.2
+        - fixed missing typeof on parent auditor
+        
+    3.1.3
+        - added retryExtension function to retryOnFailure block
+        
+    3.2.0
+        - added fireAndForget for fire and forget

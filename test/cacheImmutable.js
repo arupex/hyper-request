@@ -2,13 +2,15 @@ describe('SimpleRestClient Tests immutable cache', function() {
 
     let HyperRequest = require('../hrequest');
     var SimpleRestClient = new HyperRequest({
-        baseUrl: 'http://channels.test.net/api/v1/',
+        baseUrl: 'http://channels.test.net:1337/api/v1/',
         cacheTtl : 1000000
     });
 
     var assert = require('chai').assert;
 
     it('get channels - cached', function (done) {
+
+        this.timeout(6000);
 
         SimpleRestClient.get('channels', {})
             .then(function (data) {
@@ -27,6 +29,7 @@ describe('SimpleRestClient Tests immutable cache', function() {
     });
 
     it('get channels - cached2', function (done) {
+        this.timeout(6000);
 
         SimpleRestClient.get('channels', {})
             .then(function (data) {

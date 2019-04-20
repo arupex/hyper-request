@@ -41,6 +41,7 @@
         highWaterMark : 16000//set the high water mark on the transform stream
         cacheByReference : false // if true cache returns back the object returned in itself, does not return a copy, thus is mutable
         authorization : ''//raw authorization header if applicable
+        cacheIgnoreFields : ['headers.request_id']
     });
     
     SimpleRestClient.get('/endpoint', {
@@ -139,3 +140,35 @@
         
 This will retry 1 time beyond the initial try with a 100 ms backoff, on any errors between (inclusive) of 400 and 600 http response codes
 because this endpoint is a 404 it will retry twice, and fail hitting both the failure callback/reject/emit error, and will hit the global fail callback
+
+
+# Retry With Digest(extension)
+
+In this example we have a client which re-auths with its IAM system if it gets a 401-403 error
+
+        var dataSystem = new Request({
+            baseUrl : 'http://currency.svc.mylab.local',
+            respondWithProperty : 'data',
+            retryOnFailure : {
+                min :  401,      //min http response code
+                max :  403,      //max http response code
+                retries   :  5,  //number of retries
+                backOff :  100,  //backoff in ms * by retry count
+                retryExtension : (failedResponse) => {
+                    return iamSystem.post('sessions/login', { body : { username : 'user', password :'pass' } }).then((resp) => {
+                        return {
+                            persist : true,
+                            extensions : [
+                                {
+                                    accessor :'headers.Authentication',
+                                    value : resp.session
+                                }
+                            ]
+                        };
+                    });
+                }
+            }
+        });
+When a retry happens the retryExtension function <Promise> is called first
+ any 'extension' object it returns gets executed on the request options before the next request is executed,
+  if persist is true, it persists on later calls
