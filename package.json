@@ -1,6 +1,6 @@
 {
   "name": "hyper-request",
-  "version": "3.2.2",
+  "version": "3.2.3",
   "description": "Make http Requests without all those sub-dependencies, just http/s with a api wrapper",
   "main": "hrequest.js",
   "scripts": {
@@ -30,7 +30,7 @@
   },
   "homepage": "https://github.com/arupex/hyper-request#readme",
   "dependencies": {
-    "deep-setter": "^1.0.1",
+    "deep-setter": "^1.0.2",
     "deep-value": "^1.0.4"
   },
   "devDependencies": {
