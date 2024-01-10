@@ -29,10 +29,10 @@ class SubClient {
     }
 
     opts(options){
-      return this._requestExtender(Object.assign({}, {
-          auditor : this._auditor,
-          headers : this._headers
-      }, options));
+        return this._requestExtender(Object.assign({}, {
+            auditor : this._auditor,
+            headers : this._headers
+        }, options));
     }
 
     get(endpoint, options, callback, failure) {
@@ -433,7 +433,7 @@ class HyperRequest {
             this.log(verb, endpoint, new Date().getTime());
         }
 
-        const postData = typeof opts.body !== 'undefined' ? JSON.stringify(opts.body) : null;
+        const postData = typeof opts.body !== 'undefined' ? (typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body)) : null;
         let requestOptions = this.calcRequestOpts(verb, endpoint, opts, postData);
 
         let tmpCacheKey = JSON.parse(JSON.stringify(Object.assign({}, requestOptions, {agent: 'cache'})));
